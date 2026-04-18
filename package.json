@@ -1,0 +1,29 @@
+{
+  "name": "deskrun",
+  "version": "0.1.0",
+  "description": "A polished Windows 11 launcher built with Tauri and SolidJS.",
+  "type": "module",
+  "scripts": {
+    "start": "vite",
+    "dev": "vite",
+    "build": "vite build",
+    "clean": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"cargo clean --manifest-path 'src-tauri/Cargo.toml'; if (Test-Path 'dist') { Remove-Item -Recurse -Force 'dist' }; if (Test-Path 'node_modules/.vite') { Remove-Item -Recurse -Force 'node_modules/.vite' }\"",
+    "serve": "vite preview",
+    "tauri": "tauri"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-dialog": "^2",
+    "@tauri-apps/plugin-opener": "^2",
+    "solid-js": "^1.9.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.4",
+    "typescript": "~5.6.2",
+    "vite": "^6.0.3",
+    "vite-plugin-solid": "^2.11.0",
+    "@tauri-apps/cli": "^2",
+    "tailwindcss": "^4.1.4"
+  }
+}
