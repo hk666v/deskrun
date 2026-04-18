@@ -7,6 +7,7 @@ interface ItemContextMenuProps {
   x: number;
   y: number;
   onLaunch: (item: LaunchItem) => void;
+  onCopyCommand: (item: LaunchItem) => void;
   onEdit: (item: LaunchItem) => void;
   onDelete: (item: LaunchItem) => void;
   onClose: () => void;
@@ -26,6 +27,11 @@ export function ItemContextMenu(props: ItemContextMenuProps) {
             }}
           >
             <MenuButton onClick={() => props.onLaunch(item())}>Launch</MenuButton>
+            <Show when={item().kind === "command"}>
+              <MenuButton onClick={() => props.onCopyCommand(item())}>
+                Copy Command
+              </MenuButton>
+            </Show>
             <MenuButton onClick={() => props.onEdit(item())}>Edit</MenuButton>
             <MenuButton danger onClick={() => props.onDelete(item())}>
               Delete

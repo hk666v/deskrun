@@ -8,6 +8,7 @@ interface SearchBarProps {
   onAddApp: () => void;
   onAddFolder: () => void;
   onAddUrl: () => void;
+  onAddCommand: () => void;
   onOpenSettings: () => void;
 }
 
@@ -38,6 +39,7 @@ export function SearchBar(props: SearchBarProps) {
         <ActionButton onClick={props.onAddApp}>+ App</ActionButton>
         <ActionButton onClick={props.onAddFolder}>+ Folder</ActionButton>
         <ActionButton onClick={props.onAddUrl}>+ URL</ActionButton>
+        <ActionButton onClick={props.onAddCommand}>+ CMD</ActionButton>
         <ActionButton emphasis onClick={props.onOpenSettings}>
           Settings
         </ActionButton>

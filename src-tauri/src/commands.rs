@@ -104,6 +104,7 @@ pub fn launch_item(
     app: AppHandle,
     state: State<'_, SharedState>,
     item_id: String,
+    runtime_target: Option<String>,
 ) -> Result<(), String> {
     let (item, close_on_launch) = {
         let storage = state.lock()?;
@@ -113,7 +114,7 @@ pub fn launch_item(
         (item, storage.settings().close_on_launch)
     };
 
-    launcher::launch(&item).map_err(|error| error.to_string())?;
+    launcher::launch(&item, runtime_target.as_deref()).map_err(|error| error.to_string())?;
     if close_on_launch {
         let _ = hotkey::hide_main_window(&app);
     }

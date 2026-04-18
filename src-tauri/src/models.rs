@@ -7,6 +7,7 @@ pub enum LaunchItemKind {
     Link,
     Folder,
     Url,
+    Command,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -23,6 +24,12 @@ pub struct LaunchItem {
     pub name: String,
     pub kind: LaunchItemKind,
     pub target: String,
+    pub command: Option<String>,
+    pub fixed_args: Option<String>,
+    pub runtime_args_template: Option<String>,
+    pub working_dir: Option<String>,
+    #[serde(default)]
+    pub keep_open: bool,
     pub group_id: Option<String>,
     pub icon_source: IconSource,
     pub icon_path: Option<String>,
@@ -93,6 +100,11 @@ pub struct CreateItemPayload {
     pub kind: LaunchItemKind,
     pub target: String,
     pub name: Option<String>,
+    pub command: Option<String>,
+    pub fixed_args: Option<String>,
+    pub runtime_args_template: Option<String>,
+    pub working_dir: Option<String>,
+    pub keep_open: Option<bool>,
     pub group_id: Option<String>,
 }
 
@@ -102,6 +114,11 @@ pub struct UpdateItemPayload {
     pub id: String,
     pub name: Option<String>,
     pub target: Option<String>,
+    pub command: Option<String>,
+    pub fixed_args: Option<Option<String>>,
+    pub runtime_args_template: Option<Option<String>>,
+    pub working_dir: Option<Option<String>>,
+    pub keep_open: Option<bool>,
     pub group_id: Option<Option<String>>,
     pub custom_icon_path: Option<String>,
     pub clear_custom_icon: Option<bool>,

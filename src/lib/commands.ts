@@ -43,8 +43,8 @@ export function reorderGroups(groupIds: string[]) {
   return invoke<Group[]>("reorder_groups", { groupIds });
 }
 
-export function launchItem(itemId: string) {
-  return invoke<void>("launch_item", { itemId });
+export function launchItem(itemId: string, runtimeTarget?: string) {
+  return invoke<void>("launch_item", { itemId, runtimeTarget });
 }
 
 export function importPaths(paths: string[]) {

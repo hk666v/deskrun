@@ -7,6 +7,7 @@ interface ItemGridProps {
   activeItemId: string | null;
   sortable: boolean;
   onLaunch: (item: LaunchItem) => void;
+  onSelect: (item: LaunchItem) => void;
   onContextMenu: (item: LaunchItem, x: number, y: number) => void;
   onReorder: (fromId: string, toId: string) => void;
 }
@@ -22,8 +23,8 @@ export function ItemGrid(props: ItemGridProps) {
           <div class="flex h-full min-h-[280px] flex-col items-center justify-center gap-3 rounded-[24px] border border-dashed border-white/18 bg-black/10 text-center text-white/55">
             <p class="text-lg font-medium text-white/80">No launch items yet</p>
             <p class="max-w-sm text-sm leading-6">
-              Add `.exe`, `.lnk`, folders, or URLs from the top bar, or drop files
-              directly into the window.
+              Add `.exe`, `.lnk`, folders, URLs, or CMD commands from the top bar,
+              or drop files directly into the window.
             </p>
           </div>
         }
@@ -40,6 +41,7 @@ export function ItemGrid(props: ItemGridProps) {
                 item={item}
                 active={item.id === props.activeItemId}
                 draggable={props.sortable}
+                onSelect={() => props.onSelect(item)}
                 onClick={() => props.onLaunch(item)}
                 onContextMenu={(x, y) => props.onContextMenu(item, x, y)}
                 onDragStart={(event) => {

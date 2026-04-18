@@ -1,12 +1,14 @@
 import { Show, createEffect, createSignal } from "solid-js";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import type { LaunchItem } from "../types";
+import { buildCommandPreview } from "../lib/command-preview";
 
 const FALLBACK_LABEL: Record<LaunchItem["kind"], string> = {
   exe: "APP",
   link: "LNK",
   folder: "DIR",
   url: "WEB",
+  command: "CMD",
 };
 
 interface ItemCardProps {
@@ -14,6 +16,7 @@ interface ItemCardProps {
   active: boolean;
   draggable: boolean;
   onClick: () => void;
+  onSelect: () => void;
   onContextMenu: (x: number, y: number) => void;
   onDragStart: (event: DragEvent) => void;
   onDragOver: (event: DragEvent) => void;
@@ -35,14 +38,25 @@ export function ItemCard(props: ItemCardProps) {
       : null;
 
   const kindLabel = () => props.item.kind.toUpperCase();
+  const targetLabel = () => (props.item.kind === "command" ? "Command" : "Target");
+  const targetValue = () => {
+    if (props.item.kind !== "command") {
+      return props.item.target;
+    }
+
+    return buildCommandPreview(props.item);
+  };
 
   return (
     <button
       type="button"
       draggable={props.draggable}
+      onMouseEnter={props.onSelect}
+      onFocus={props.onSelect}
       onClick={props.onClick}
       onContextMenu={(event) => {
         event.preventDefault();
+        props.onSelect();
         props.onContextMenu(event.clientX, event.clientY);
       }}
       onDragStart={props.onDragStart}
@@ -94,10 +108,10 @@ export function ItemCard(props: ItemCardProps) {
 
       <div class="min-w-0 rounded-[16px] border border-white/8 bg-black/12 px-3 py-2.5">
         <div class="mb-1 text-[9px] font-medium uppercase tracking-[0.16em] text-white/24">
-          Target
+          {targetLabel()}
         </div>
-        <div class="truncate text-[11px] leading-4 text-white/56" title={props.item.target}>
-            {props.item.target}
+        <div class="truncate text-[11px] leading-4 text-white/56" title={targetValue()}>
+          {targetValue()}
         </div>
       </div>
 

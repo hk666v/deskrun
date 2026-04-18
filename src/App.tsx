@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js";
+import { Show, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { open } from "@tauri-apps/plugin-dialog";
@@ -19,6 +19,7 @@ import {
   setWindowSize,
   updateItem,
 } from "./lib/commands";
+import { CommandRuntimeDialog } from "./components/CommandRuntimeDialog";
 import { GroupTabs } from "./components/GroupTabs";
 import { ItemEditorDialog } from "./components/ItemEditorDialog";
 import { ItemContextMenu } from "./components/ItemContextMenu";
@@ -26,10 +27,13 @@ import { ItemGrid } from "./components/ItemGrid";
 import { LauncherShell } from "./components/LauncherShell";
 import { SearchBar } from "./components/SearchBar";
 import { SettingsPanel } from "./components/SettingsPanel";
+import { copyText } from "./lib/clipboard";
+import { buildCommandPreview, requiresRuntimeTarget } from "./lib/command-preview";
 import type { Group, LaunchItem, Settings, WindowSizeLimits } from "./types";
 
 type EditorState =
   | { mode: "create-url"; item: null }
+  | { mode: "create-command"; item: null }
   | { mode: "edit"; item: LaunchItem }
   | null;
 
@@ -37,6 +41,11 @@ type ContextMenuState = {
   item: LaunchItem;
   x: number;
   y: number;
+} | null;
+
+type CommandRuntimeState = {
+  item: LaunchItem;
+  target: string;
 } | null;
 
 const DEFAULT_SETTINGS: Settings = {
@@ -68,6 +77,8 @@ function App() {
   const [selectedItemId, setSelectedItemId] = createSignal<string | null>(null);
   const [editorState, setEditorState] = createSignal<EditorState>(null);
   const [contextMenu, setContextMenu] = createSignal<ContextMenuState>(null);
+  const [commandRuntimeState, setCommandRuntimeState] =
+    createSignal<CommandRuntimeState>(null);
   const [settingsOpen, setSettingsOpen] = createSignal(false);
   const [dialogBusy, setDialogBusy] = createSignal(false);
   const [draggingExternal, setDraggingExternal] = createSignal(false);
@@ -82,6 +93,19 @@ function App() {
       )
       .filter((item) => item.name.toLowerCase().includes(term))
       .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+  });
+
+  const selectedItem = createMemo(
+    () => visibleItems().find((item) => item.id === selectedItemId()) ?? null,
+  );
+
+  const selectedCommandPreview = createMemo(() => {
+    const item = selectedItem();
+    if (!item || item.kind !== "command") {
+      return null;
+    }
+
+    return buildCommandPreview(item);
   });
 
   const syncSelection = (nextItems: LaunchItem[]) => {
@@ -160,9 +184,38 @@ function App() {
     }
   };
 
+  const performLaunch = async (item: LaunchItem, runtimeTarget?: string) => {
+    setContextMenu(null);
+    await launchItem(item.id, runtimeTarget);
+  };
+
   const handleLaunch = async (item: LaunchItem) => {
     setContextMenu(null);
-    await launchItem(item.id);
+    if (requiresRuntimeTarget(item)) {
+      setCommandRuntimeState({
+        item,
+        target: "",
+      });
+      return;
+    }
+
+    await performLaunch(item);
+  };
+
+  const submitRuntimeLaunch = async () => {
+    const state = commandRuntimeState();
+    if (!state) {
+      return;
+    }
+
+    const runtimeTarget = state.target.trim();
+    if (!runtimeTarget) {
+      notify("Please enter a runtime target");
+      return;
+    }
+
+    await performLaunch(state.item, runtimeTarget);
+    setCommandRuntimeState(null);
   };
 
   const handleDelete = async (item: LaunchItem) => {
@@ -170,6 +223,16 @@ function App() {
     await deleteItem(item.id);
     setItems((current) => current.filter((entry) => entry.id !== item.id));
     notify("Launcher item removed");
+  };
+
+  const handleCopyCommand = async (item: LaunchItem) => {
+    setContextMenu(null);
+    if (item.kind !== "command") {
+      return;
+    }
+
+    await copyText(buildCommandPreview(item));
+    notify("Command copied");
   };
 
   const handleReorder = async (fromId: string, toId: string) => {
@@ -209,6 +272,7 @@ function App() {
     setEditorState(null);
     setSettingsOpen(false);
     setContextMenu(null);
+    setCommandRuntimeState(null);
     await currentWindow.hide();
   };
 
@@ -279,6 +343,14 @@ function App() {
         return;
       }
 
+      if (commandRuntimeState()) {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          await submitRuntimeLaunch();
+        }
+        return;
+      }
+
       if (event.key === "ArrowRight") {
         event.preventDefault();
         moveSelection(1);
@@ -343,6 +415,31 @@ function App() {
           </div>
         </div>
 
+        <Show when={selectedCommandPreview()}>
+          {(preview) => (
+            <div class="rounded-[24px] border border-white/12 bg-black/12 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+              <div class="flex items-start justify-between gap-4">
+                <div class="min-w-0">
+                  <div class="text-[10px] uppercase tracking-[0.2em] text-white/28">
+                    CMD Preview
+                  </div>
+                  <div
+                    class="mt-2 truncate font-mono text-[12px] leading-5 text-white/74"
+                    title={preview()}
+                  >
+                    {preview()}
+                  </div>
+                </div>
+                <Show when={requiresRuntimeTarget(selectedItem()!)}>
+                  <div class="shrink-0 rounded-full border border-white/10 bg-white/6 px-3 py-1.5 text-[10px] uppercase tracking-[0.14em] text-white/42">
+                    {`{target}`} waits at launch
+                  </div>
+                </Show>
+              </div>
+            </div>
+          )}
+        </Show>
+
         <SearchBar
           query={query()}
           hotkey={settings().hotkey}
@@ -353,6 +450,7 @@ function App() {
           onAddApp={handlePickApp}
           onAddFolder={handlePickFolder}
           onAddUrl={() => setEditorState({ mode: "create-url", item: null })}
+          onAddCommand={() => setEditorState({ mode: "create-command", item: null })}
           onOpenSettings={() => setSettingsOpen(true)}
         />
 
@@ -366,6 +464,7 @@ function App() {
           items={visibleItems()}
           activeItemId={selectedItemId()}
           sortable={!query()}
+          onSelect={(item) => setSelectedItemId(item.id)}
           onLaunch={handleLaunch}
           onContextMenu={(item, x, y) => {
             setSelectedItemId(item.id);
@@ -381,6 +480,7 @@ function App() {
         x={contextMenu()?.x ?? 0}
         y={contextMenu()?.y ?? 0}
         onLaunch={handleLaunch}
+        onCopyCommand={handleCopyCommand}
         onEdit={(item) => {
           setContextMenu(null);
           setEditorState({ mode: "edit", item });
@@ -411,11 +511,30 @@ function App() {
             });
             setItems((current) => [...current, created]);
             notify("URL shortcut created");
+          } else if (state?.mode === "create-command") {
+            const created = await createItem({
+              kind: "command",
+              name: payload.name,
+              target: payload.command ?? payload.target,
+              command: payload.command,
+              fixedArgs: payload.fixedArgs,
+              runtimeArgsTemplate: payload.runtimeArgsTemplate,
+              workingDir: payload.workingDir,
+              keepOpen: payload.keepOpen,
+              groupId: payload.groupId,
+            });
+            setItems((current) => [...current, created]);
+            notify("CMD shortcut created");
           } else if (state?.mode === "edit" && state.item) {
             const updated = await updateItem({
               id: state.item.id,
               name: payload.name,
               target: payload.target,
+              command: payload.command,
+              fixedArgs: payload.fixedArgs,
+              runtimeArgsTemplate: payload.runtimeArgsTemplate,
+              workingDir: payload.workingDir,
+              keepOpen: payload.keepOpen,
               groupId: payload.groupId,
               customIconPath: payload.customIconPath,
               clearCustomIcon: payload.clearCustomIcon,
@@ -427,6 +546,24 @@ function App() {
           }
           setEditorState(null);
         }}
+      />
+
+      <CommandRuntimeDialog
+        open={commandRuntimeState() !== null}
+        item={commandRuntimeState()?.item ?? null}
+        value={commandRuntimeState()?.target ?? ""}
+        onInput={(value) =>
+          setCommandRuntimeState((current) =>
+            current
+              ? {
+                  ...current,
+                  target: value,
+                }
+              : null,
+          )
+        }
+        onClose={() => setCommandRuntimeState(null)}
+        onSubmit={submitRuntimeLaunch}
       />
 
       <SettingsPanel

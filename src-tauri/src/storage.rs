@@ -93,13 +93,43 @@ impl StorageState {
     pub fn create_item(&mut self, payload: CreateItemPayload) -> Result<LaunchItem> {
         let now = now_iso();
         let id = Uuid::new_v4().to_string();
+        let kind = payload.kind.clone();
+        let command = match kind {
+            LaunchItemKind::Command => Some(
+                payload
+                    .command
+                    .clone()
+                    .unwrap_or_else(|| payload.target.clone())
+                    .trim()
+                    .to_string(),
+            ),
+            _ => None,
+        };
+        let target = match kind {
+            LaunchItemKind::Command => command.clone().unwrap_or_default(),
+            _ => payload.target,
+        };
+
+        if matches!(kind, LaunchItemKind::Command)
+            && command.as_deref().map(|value| value.is_empty()).unwrap_or(true)
+        {
+            return Err(anyhow!("command cannot be empty"));
+        }
+
         let mut item = LaunchItem {
             id: id.clone(),
             name: payload
                 .name
-                .unwrap_or_else(|| default_name_for_target(&payload.kind, &payload.target)),
-            kind: payload.kind,
-            target: payload.target,
+                .unwrap_or_else(|| default_name_for_target(&kind, &target)),
+            kind,
+            target,
+            command,
+            fixed_args: normalize_optional_text(payload.fixed_args),
+            runtime_args_template: normalize_optional_text(payload.runtime_args_template),
+            working_dir: payload
+                .working_dir
+                .and_then(|value| normalize_text(value)),
+            keep_open: payload.keep_open.unwrap_or(false),
             group_id: payload.group_id,
             icon_source: IconSource::Auto,
             icon_path: None,
@@ -128,6 +158,11 @@ impl StorageState {
                 kind,
                 target: path.to_string_lossy().to_string(),
                 name: Some(default_name_for_path(&path)),
+                command: None,
+                fixed_args: None,
+                runtime_args_template: None,
+                working_dir: None,
+                keep_open: None,
                 group_id: None,
             };
 
@@ -158,6 +193,33 @@ impl StorageState {
             if item.icon_source == IconSource::Auto {
                 item.icon_path = icons::resolve_auto_icon(item, &self.icons_dir)?;
             }
+        }
+
+        if let Some(command) = payload.command {
+            let trimmed = command.trim().to_string();
+            if trimmed.is_empty() {
+                return Err(anyhow!("command cannot be empty"));
+            }
+            item.command = Some(trimmed.clone());
+            if matches!(item.kind, LaunchItemKind::Command) {
+                item.target = trimmed;
+            }
+        }
+
+        if let Some(fixed_args) = payload.fixed_args {
+            item.fixed_args = fixed_args.and_then(normalize_text);
+        }
+
+        if let Some(runtime_args_template) = payload.runtime_args_template {
+            item.runtime_args_template = runtime_args_template.and_then(normalize_text);
+        }
+
+        if let Some(working_dir) = payload.working_dir {
+            item.working_dir = working_dir.and_then(normalize_text);
+        }
+
+        if let Some(keep_open) = payload.keep_open {
+            item.keep_open = keep_open;
         }
 
         if let Some(group_id) = requested_group_id {
@@ -365,11 +427,24 @@ fn default_name_for_path(path: &Path) -> String {
 
 fn default_name_for_target(kind: &LaunchItemKind, target: &str) -> String {
     match kind {
-        LaunchItemKind::Url => target.to_string(),
+        LaunchItemKind::Url | LaunchItemKind::Command => target.to_string(),
         _ => default_name_for_path(Path::new(target)),
     }
 }
 
 fn now_iso() -> String {
     Utc::now().to_rfc3339()
+}
+
+fn normalize_optional_text(value: Option<String>) -> Option<String> {
+    value.and_then(normalize_text)
+}
+
+fn normalize_text(value: String) -> Option<String> {
+    let trimmed = value.trim().to_string();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed)
+    }
 }

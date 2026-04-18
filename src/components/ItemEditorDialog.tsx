@@ -4,7 +4,7 @@ import type { Group, LaunchItem } from "../types";
 
 interface ItemEditorDialogProps {
   open: boolean;
-  mode: "create-url" | "edit";
+  mode: "create-url" | "create-command" | "edit";
   item: LaunchItem | null;
   groups: Group[];
   onBusyChange: (busy: boolean) => void;
@@ -13,6 +13,11 @@ interface ItemEditorDialogProps {
   onSave: (payload: {
     name: string;
     target: string;
+    command?: string;
+    fixedArgs?: string | null;
+    runtimeArgsTemplate?: string | null;
+    workingDir?: string | null;
+    keepOpen?: boolean;
     groupId: string | null;
     customIconPath?: string;
     clearCustomIcon?: boolean;
@@ -22,10 +27,17 @@ interface ItemEditorDialogProps {
 export function ItemEditorDialog(props: ItemEditorDialogProps) {
   const [name, setName] = createSignal("");
   const [target, setTarget] = createSignal("");
+  const [fixedArgs, setFixedArgs] = createSignal("");
+  const [runtimeArgsTemplate, setRuntimeArgsTemplate] = createSignal("");
+  const [workingDir, setWorkingDir] = createSignal("");
+  const [keepOpen, setKeepOpen] = createSignal(false);
   const [groupId, setGroupId] = createSignal<string | null>(null);
   const [iconMode, setIconMode] = createSignal<"auto" | "custom">("auto");
   const [customIconPath, setCustomIconPath] = createSignal<string>();
   const [clearCustomIcon, setClearCustomIcon] = createSignal(false);
+
+  const isCommandMode = () =>
+    props.mode === "create-command" || props.item?.kind === "command";
 
   createEffect(() => {
     if (!props.open) {
@@ -34,7 +46,17 @@ export function ItemEditorDialog(props: ItemEditorDialogProps) {
 
     const item = props.item;
     setName(item?.name ?? "");
-    setTarget(item?.target ?? "https://");
+    setTarget(
+      props.mode === "create-url"
+        ? item?.target ?? "https://"
+        : isCommandMode()
+          ? item?.command ?? item?.target ?? ""
+          : item?.target ?? "",
+    );
+    setFixedArgs(item?.fixedArgs ?? "");
+    setRuntimeArgsTemplate(item?.runtimeArgsTemplate ?? "");
+    setWorkingDir(item?.workingDir ?? "");
+    setKeepOpen(item?.keepOpen ?? false);
     setGroupId(item?.groupId ?? null);
     setIconMode(item?.iconSource === "custom" ? "custom" : "auto");
     setCustomIconPath(undefined);
@@ -71,12 +93,18 @@ export function ItemEditorDialog(props: ItemEditorDialogProps) {
           <div class="flex items-start justify-between gap-4">
             <div>
               <h2 class="text-xl font-semibold text-white">
-                {props.mode === "create-url" ? "添加网址" : "编辑启动项"}
+                {props.mode === "create-url"
+                  ? "Add URL"
+                  : props.mode === "create-command"
+                    ? "Add CMD Command"
+                    : "Edit Launcher Item"}
               </h2>
               <p class="mt-1 text-sm text-white/46">
                 {props.mode === "create-url"
-                  ? "创建一个可被快速打开的网址入口。"
-                  : "调整名称、目标路径、分组和自定义图标。"}
+                  ? "Create a website shortcut for quick launch."
+                  : isCommandMode()
+                    ? "Run a command through cmd.exe, with an optional working directory."
+                    : "Adjust the name, target, group, and custom icon."}
               </p>
             </div>
             <button
@@ -94,11 +122,19 @@ export function ItemEditorDialog(props: ItemEditorDialogProps) {
                 value={name()}
                 onInput={(event) => setName(event.currentTarget.value)}
                 class="field-input"
-                placeholder="例如：Chrome、Workspace、Docs"
+                placeholder="Chrome, Workspace, Docs"
               />
             </Field>
 
-            <Field label={props.mode === "create-url" ? "URL" : "Target"}>
+            <Field
+              label={
+                props.mode === "create-url"
+                  ? "URL"
+                  : isCommandMode()
+                    ? "Command"
+                    : "Target"
+              }
+            >
               <input
                 value={target()}
                 onInput={(event) => setTarget(event.currentTarget.value)}
@@ -106,10 +142,58 @@ export function ItemEditorDialog(props: ItemEditorDialogProps) {
                 placeholder={
                   props.mode === "create-url"
                     ? "https://example.com"
-                    : "C:\\Program Files\\App\\app.exe"
+                    : isCommandMode()
+                      ? "npm run dev"
+                      : "C:\\Program Files\\App\\app.exe"
                 }
               />
             </Field>
+
+            <Show when={isCommandMode()}>
+              <>
+                <Field label="Fixed Args">
+                  <input
+                    value={fixedArgs()}
+                    onInput={(event) => setFixedArgs(event.currentTarget.value)}
+                    class="field-input"
+                    placeholder="-silent -threads 50"
+                  />
+                </Field>
+
+                <Field label="Runtime Template">
+                  <input
+                    value={runtimeArgsTemplate()}
+                    onInput={(event) =>
+                      setRuntimeArgsTemplate(event.currentTarget.value)
+                    }
+                    class="field-input"
+                    placeholder="-u {target}"
+                  />
+                  <p class="text-xs text-white/42">
+                    Use <code>{`{target}`}</code> to ask for one runtime value before launch.
+                  </p>
+                </Field>
+
+                <Field label="Working Directory">
+                  <input
+                    value={workingDir()}
+                    onInput={(event) => setWorkingDir(event.currentTarget.value)}
+                    class="field-input"
+                    placeholder="C:\\Projects\\my-app"
+                  />
+                </Field>
+
+                <label class="flex items-center justify-between gap-3 rounded-[18px] border border-white/10 bg-black/10 px-4 py-3 text-sm text-white/75">
+                  <span>Keep CMD window open</span>
+                  <input
+                    type="checkbox"
+                    checked={keepOpen()}
+                    onChange={(event) => setKeepOpen(event.currentTarget.checked)}
+                    class="h-4 w-4 accent-white"
+                  />
+                </label>
+              </>
+            </Show>
 
             <Field label="Group">
               <select
@@ -126,7 +210,7 @@ export function ItemEditorDialog(props: ItemEditorDialogProps) {
               </select>
             </Field>
 
-            <Show when={props.mode === "edit"}>
+            <Show when={props.mode === "edit" && props.item?.kind !== "command"}>
               <div class="flex items-center gap-3 rounded-[22px] border border-white/10 bg-white/6 p-4">
                 <button
                   type="button"
@@ -191,6 +275,12 @@ export function ItemEditorDialog(props: ItemEditorDialogProps) {
                   props.onSave({
                     name: name().trim(),
                     target: target().trim(),
+                    command: isCommandMode() ? target().trim() : undefined,
+                    fixedArgs: isCommandMode() ? fixedArgs().trim() || null : undefined,
+                    runtimeArgsTemplate:
+                      isCommandMode() ? runtimeArgsTemplate().trim() || null : undefined,
+                    workingDir: isCommandMode() ? workingDir().trim() || null : undefined,
+                    keepOpen: isCommandMode() ? keepOpen() : undefined,
                     groupId: groupId(),
                     customIconPath:
                       iconMode() === "custom" ? customIconPath() : undefined,
@@ -220,7 +310,7 @@ interface FieldProps {
 function Field(props: FieldProps) {
   return (
     <label class="flex flex-col gap-2 text-sm text-white/62">
-      <span class="uppercase tracking-[0.22em] text-[11px] text-white/36">
+      <span class="text-[11px] uppercase tracking-[0.22em] text-white/36">
         {props.label}
       </span>
       {props.children}
