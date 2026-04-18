@@ -9,33 +9,42 @@ interface GroupTabsProps {
 
 export function GroupTabs(props: GroupTabsProps) {
   return (
-    <div class="flex items-center gap-2 overflow-x-auto pb-1">
-      <button
-        type="button"
-        onClick={() => props.onSelect(null)}
-        class={`rounded-full px-4 py-2 text-sm font-medium transition ${
-          props.currentGroupId === null
-            ? "bg-white text-slate-900 shadow-[0_10px_24px_rgba(15,23,42,0.2)]"
-            : "bg-white/10 text-white/62 hover:bg-white/16 hover:text-white"
-        }`}
-      >
-        All
-      </button>
-      <For each={props.groups}>
-        {(group) => (
+    <div class="flex min-w-0 items-center gap-3 rounded-[22px] border border-white/10 bg-black/10 px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+      <div class="shrink-0 px-1 text-[10px] uppercase tracking-[0.22em] text-white/28">
+        Groups
+      </div>
+
+      <div class="min-w-0 flex-1 overflow-x-auto">
+        <div class="flex w-max items-center gap-2 pr-1">
           <button
             type="button"
-            onClick={() => props.onSelect(group.id)}
-            class={`rounded-full px-4 py-2 text-sm font-medium transition ${
-              props.currentGroupId === group.id
-                ? "bg-white text-slate-900 shadow-[0_10px_24px_rgba(15,23,42,0.2)]"
-                : "bg-white/10 text-white/62 hover:bg-white/16 hover:text-white"
+            onClick={() => props.onSelect(null)}
+            class={`max-w-[180px] shrink-0 truncate rounded-full border px-3.5 py-1.5 text-[13px] font-medium transition ${
+              props.currentGroupId === null
+                ? "border-white/24 bg-white text-slate-900 shadow-[0_8px_18px_rgba(15,23,42,0.16)]"
+                : "border-transparent bg-white/[0.04] text-white/52 hover:bg-white/[0.08] hover:text-white/82"
             }`}
           >
-            {group.name}
+            All
           </button>
-        )}
-      </For>
+          <For each={props.groups}>
+            {(group) => (
+              <button
+                type="button"
+                onClick={() => props.onSelect(group.id)}
+                class={`max-w-[180px] shrink-0 truncate rounded-full border px-3.5 py-1.5 text-[13px] font-medium transition ${
+                  props.currentGroupId === group.id
+                    ? "border-white/24 bg-white text-slate-900 shadow-[0_8px_18px_rgba(15,23,42,0.16)]"
+                    : "border-transparent bg-white/[0.04] text-white/52 hover:bg-white/[0.08] hover:text-white/82"
+                }`}
+                title={group.name}
+              >
+                {group.name}
+              </button>
+            )}
+          </For>
+        </div>
+      </div>
     </div>
   );
 }

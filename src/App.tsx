@@ -48,6 +48,12 @@ type CommandRuntimeState = {
   target: string;
 } | null;
 
+type HoverPreviewState = {
+  item: LaunchItem;
+  x: number;
+  y: number;
+} | null;
+
 const DEFAULT_SETTINGS: Settings = {
   hotkey: "Alt+Space",
   launchOnStartup: false,
@@ -79,10 +85,13 @@ function App() {
   const [contextMenu, setContextMenu] = createSignal<ContextMenuState>(null);
   const [commandRuntimeState, setCommandRuntimeState] =
     createSignal<CommandRuntimeState>(null);
+  const [hoverPreview, setHoverPreview] = createSignal<HoverPreviewState>(null);
   const [settingsOpen, setSettingsOpen] = createSignal(false);
   const [dialogBusy, setDialogBusy] = createSignal(false);
   const [draggingExternal, setDraggingExternal] = createSignal(false);
   const [feedback, setFeedback] = createSignal("");
+  let hoverPreviewTimer: number | undefined;
+  let pendingHoverPreview: HoverPreviewState = null;
   let searchInput!: HTMLInputElement;
 
   const visibleItems = createMemo(() => {
@@ -93,19 +102,6 @@ function App() {
       )
       .filter((item) => item.name.toLowerCase().includes(term))
       .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
-  });
-
-  const selectedItem = createMemo(
-    () => visibleItems().find((item) => item.id === selectedItemId()) ?? null,
-  );
-
-  const selectedCommandPreview = createMemo(() => {
-    const item = selectedItem();
-    if (!item || item.kind !== "command") {
-      return null;
-    }
-
-    return buildCommandPreview(item);
   });
 
   const syncSelection = (nextItems: LaunchItem[]) => {
@@ -127,6 +123,45 @@ function App() {
     setWindowSizeLimits(data.windowSizeLimits);
     syncSelection(data.items);
   };
+
+  const hoverPreviewPosition = createMemo(() => {
+    const state = hoverPreview();
+    if (!state) {
+      return null;
+    }
+
+    const panelWidth = 360;
+    const panelHeight = 240;
+    const gap = 18;
+    const margin = 16;
+    const canPlaceRight = state.x + gap + panelWidth <= window.innerWidth - margin;
+    const left = canPlaceRight
+      ? state.x + gap
+      : Math.max(margin, state.x - gap - panelWidth);
+    const maxY = Math.max(margin, window.innerHeight - panelHeight - margin);
+    const top = Math.min(Math.max(state.y - 18, margin), maxY);
+    const arrowTop = Math.min(Math.max(state.y - top - 10, 18), panelHeight - 28);
+
+    return {
+      left,
+      top,
+      side: canPlaceRight ? "right" : "left",
+      arrowTop,
+    };
+  });
+
+  const hoverPreviewDisplay = createMemo(() => {
+    const state = hoverPreview();
+    const position = hoverPreviewPosition();
+    if (!state || !position) {
+      return null;
+    }
+
+    return {
+      item: state.item,
+      ...position,
+    };
+  });
 
   const notify = (message: string) => {
     setFeedback(message);
@@ -186,7 +221,35 @@ function App() {
 
   const performLaunch = async (item: LaunchItem, runtimeTarget?: string) => {
     setContextMenu(null);
+    setHoverPreview(null);
     await launchItem(item.id, runtimeTarget);
+  };
+
+  const clearHoverPreview = () => {
+    window.clearTimeout(hoverPreviewTimer);
+    hoverPreviewTimer = undefined;
+    pendingHoverPreview = null;
+    setHoverPreview(null);
+  };
+
+  const scheduleHoverPreview = (item: LaunchItem, x: number, y: number) => {
+    const visible = hoverPreview();
+    if (visible?.item.id === item.id) {
+      setHoverPreview({ item, x, y });
+      return;
+    }
+
+    pendingHoverPreview = { item, x, y };
+    if (hoverPreviewTimer !== undefined) {
+      return;
+    }
+
+    hoverPreviewTimer = window.setTimeout(() => {
+      hoverPreviewTimer = undefined;
+      if (pendingHoverPreview) {
+        setHoverPreview(pendingHoverPreview);
+      }
+    }, 180);
   };
 
   const handleLaunch = async (item: LaunchItem) => {
@@ -220,6 +283,7 @@ function App() {
 
   const handleDelete = async (item: LaunchItem) => {
     setContextMenu(null);
+    clearHoverPreview();
     await deleteItem(item.id);
     setItems((current) => current.filter((entry) => entry.id !== item.id));
     notify("Launcher item removed");
@@ -227,6 +291,7 @@ function App() {
 
   const handleCopyCommand = async (item: LaunchItem) => {
     setContextMenu(null);
+    clearHoverPreview();
     if (item.kind !== "command") {
       return;
     }
@@ -273,6 +338,7 @@ function App() {
     setSettingsOpen(false);
     setContextMenu(null);
     setCommandRuntimeState(null);
+    clearHoverPreview();
     await currentWindow.hide();
   };
 
@@ -380,6 +446,7 @@ function App() {
     document.body?.addEventListener("keyup", handleEscape, true);
 
     onCleanup(() => {
+      clearHoverPreview();
       unlistenFocus();
       unlistenDragDrop();
       unlistenFocusSearch();
@@ -415,31 +482,6 @@ function App() {
           </div>
         </div>
 
-        <Show when={selectedCommandPreview()}>
-          {(preview) => (
-            <div class="rounded-[24px] border border-white/12 bg-black/12 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
-              <div class="flex items-start justify-between gap-4">
-                <div class="min-w-0">
-                  <div class="text-[10px] uppercase tracking-[0.2em] text-white/28">
-                    CMD Preview
-                  </div>
-                  <div
-                    class="mt-2 truncate font-mono text-[12px] leading-5 text-white/74"
-                    title={preview()}
-                  >
-                    {preview()}
-                  </div>
-                </div>
-                <Show when={requiresRuntimeTarget(selectedItem()!)}>
-                  <div class="shrink-0 rounded-full border border-white/10 bg-white/6 px-3 py-1.5 text-[10px] uppercase tracking-[0.14em] text-white/42">
-                    {`{target}`} waits at launch
-                  </div>
-                </Show>
-              </div>
-            </div>
-          )}
-        </Show>
-
         <SearchBar
           query={query()}
           hotkey={settings().hotkey}
@@ -465,14 +507,63 @@ function App() {
           activeItemId={selectedItemId()}
           sortable={!query()}
           onSelect={(item) => setSelectedItemId(item.id)}
+          onPreviewHover={scheduleHoverPreview}
+          onPreviewLeave={clearHoverPreview}
           onLaunch={handleLaunch}
           onContextMenu={(item, x, y) => {
             setSelectedItemId(item.id);
+            clearHoverPreview();
             setContextMenu({ item, x, y });
           }}
           onReorder={handleReorder}
         />
       </div>
+
+      <Show when={hoverPreviewDisplay()}>
+        {(preview) => (
+        <div
+          class="pointer-events-none absolute z-40 w-[360px] overflow-hidden rounded-[24px] border border-white/12 bg-[radial-gradient(circle_at_top_left,rgba(129,168,255,0.18),transparent_36%),radial-gradient(circle_at_bottom_right,rgba(106,208,255,0.12),transparent_34%),linear-gradient(180deg,rgba(14,20,32,0.97),rgba(8,12,20,0.97))] shadow-[0_28px_70px_rgba(0,0,0,0.38),0_10px_24px_rgba(17,24,39,0.24)] backdrop-blur-2xl"
+          style={{
+            left: `${preview().left}px`,
+            top: `${preview().top}px`,
+          }}
+        >
+          <div class="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.02)_24%,transparent_52%)]" />
+          <div class="absolute inset-px rounded-[23px] border border-white/[0.04]" />
+          <div
+            class="absolute h-4 w-4 rotate-45 border border-white/12 bg-[linear-gradient(180deg,rgba(24,34,52,0.98),rgba(10,16,27,0.98))] shadow-[0_8px_18px_rgba(0,0,0,0.2)]"
+            style={{
+              top: `${preview().arrowTop}px`,
+              left: preview().side === "right" ? "-8px" : undefined,
+              right: preview().side === "left" ? "-8px" : undefined,
+            }}
+          />
+          <div class="relative flex max-h-[240px] min-h-0 flex-col gap-3 overflow-y-auto p-4 pr-3">
+            <Show when={preview().item.kind === "command"}>
+              <div class="min-w-0 rounded-[18px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.025))] px-3.5 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+                <div class="text-[10px] uppercase tracking-[0.18em] text-sky-100/34">
+                  CMD Preview
+                </div>
+                <div class="mt-2 whitespace-pre-wrap break-all font-mono text-[12px] leading-5 text-white/82">
+                  {buildCommandPreview(preview().item)}
+                </div>
+              </div>
+            </Show>
+
+            <Show when={preview().item.note?.trim()}>
+              <div class="min-w-0 rounded-[18px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.045),rgba(255,255,255,0.02))] px-3.5 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+                <div class="text-[10px] uppercase tracking-[0.18em] text-sky-100/34">
+                  Note
+                </div>
+                <div class="mt-2 whitespace-pre-wrap break-words text-[12px] leading-6 text-white/74">
+                  {preview().item.note}
+                </div>
+              </div>
+            </Show>
+          </div>
+        </div>
+        )}
+      </Show>
 
       <ItemContextMenu
         item={contextMenu()?.item ?? null}
@@ -507,6 +598,7 @@ function App() {
               kind: "url",
               name: payload.name,
               target: payload.target,
+              note: payload.note,
               groupId: payload.groupId,
             });
             setItems((current) => [...current, created]);
@@ -517,6 +609,7 @@ function App() {
               name: payload.name,
               target: payload.command ?? payload.target,
               command: payload.command,
+              note: payload.note,
               fixedArgs: payload.fixedArgs,
               runtimeArgsTemplate: payload.runtimeArgsTemplate,
               workingDir: payload.workingDir,
@@ -531,6 +624,7 @@ function App() {
               name: payload.name,
               target: payload.target,
               command: payload.command,
+              note: payload.note,
               fixedArgs: payload.fixedArgs,
               runtimeArgsTemplate: payload.runtimeArgsTemplate,
               workingDir: payload.workingDir,

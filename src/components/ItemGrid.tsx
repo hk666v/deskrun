@@ -8,6 +8,8 @@ interface ItemGridProps {
   sortable: boolean;
   onLaunch: (item: LaunchItem) => void;
   onSelect: (item: LaunchItem) => void;
+  onPreviewHover: (item: LaunchItem, x: number, y: number) => void;
+  onPreviewLeave: () => void;
   onContextMenu: (item: LaunchItem, x: number, y: number) => void;
   onReorder: (fromId: string, toId: string) => void;
 }
@@ -30,7 +32,7 @@ export function ItemGrid(props: ItemGridProps) {
         }
       >
         <div
-          class="grid content-start auto-rows-max gap-4 overflow-y-auto pr-2"
+          class="grid content-start items-stretch gap-4 overflow-y-auto pr-2"
           style={{
             "grid-template-columns": "repeat(auto-fill, minmax(208px, 1fr))",
           }}
@@ -42,6 +44,8 @@ export function ItemGrid(props: ItemGridProps) {
                 active={item.id === props.activeItemId}
                 draggable={props.sortable}
                 onSelect={() => props.onSelect(item)}
+                onPreviewHover={(x, y) => props.onPreviewHover(item, x, y)}
+                onPreviewLeave={props.onPreviewLeave}
                 onClick={() => props.onLaunch(item)}
                 onContextMenu={(x, y) => props.onContextMenu(item, x, y)}
                 onDragStart={(event) => {

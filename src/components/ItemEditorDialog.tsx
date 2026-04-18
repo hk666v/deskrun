@@ -14,6 +14,7 @@ interface ItemEditorDialogProps {
     name: string;
     target: string;
     command?: string;
+    note?: string | null;
     fixedArgs?: string | null;
     runtimeArgsTemplate?: string | null;
     workingDir?: string | null;
@@ -27,6 +28,7 @@ interface ItemEditorDialogProps {
 export function ItemEditorDialog(props: ItemEditorDialogProps) {
   const [name, setName] = createSignal("");
   const [target, setTarget] = createSignal("");
+  const [note, setNote] = createSignal("");
   const [fixedArgs, setFixedArgs] = createSignal("");
   const [runtimeArgsTemplate, setRuntimeArgsTemplate] = createSignal("");
   const [workingDir, setWorkingDir] = createSignal("");
@@ -53,6 +55,7 @@ export function ItemEditorDialog(props: ItemEditorDialogProps) {
           ? item?.command ?? item?.target ?? ""
           : item?.target ?? "",
     );
+    setNote(item?.note ?? "");
     setFixedArgs(item?.fixedArgs ?? "");
     setRuntimeArgsTemplate(item?.runtimeArgsTemplate ?? "");
     setWorkingDir(item?.workingDir ?? "");
@@ -146,6 +149,15 @@ export function ItemEditorDialog(props: ItemEditorDialogProps) {
                       ? "npm run dev"
                       : "C:\\Program Files\\App\\app.exe"
                 }
+              />
+            </Field>
+
+            <Field label="Note">
+              <textarea
+                value={note()}
+                onInput={(event) => setNote(event.currentTarget.value)}
+                class="field-input min-h-[92px] resize-y py-3 leading-6"
+                placeholder="Explain what this item does, what the parameters mean, or any usage tips."
               />
             </Field>
 
@@ -276,6 +288,7 @@ export function ItemEditorDialog(props: ItemEditorDialogProps) {
                     name: name().trim(),
                     target: target().trim(),
                     command: isCommandMode() ? target().trim() : undefined,
+                    note: note().trim() || null,
                     fixedArgs: isCommandMode() ? fixedArgs().trim() || null : undefined,
                     runtimeArgsTemplate:
                       isCommandMode() ? runtimeArgsTemplate().trim() || null : undefined,

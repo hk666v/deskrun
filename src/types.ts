@@ -7,6 +7,7 @@ export interface LaunchItem {
   kind: LaunchItemKind;
   target: string;
   command: string | null;
+  note: string | null;
   fixedArgs: string | null;
   runtimeArgsTemplate: string | null;
   workingDir: string | null;
@@ -53,6 +54,7 @@ export interface CreateItemPayload {
   target: string;
   name?: string;
   command?: string;
+  note?: string | null;
   fixedArgs?: string | null;
   runtimeArgsTemplate?: string | null;
   workingDir?: string | null;
@@ -65,6 +67,7 @@ export interface UpdateItemPayload {
   name?: string;
   target?: string;
   command?: string;
+  note?: string | null;
   fixedArgs?: string | null;
   runtimeArgsTemplate?: string | null;
   workingDir?: string | null;

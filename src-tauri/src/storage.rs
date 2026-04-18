@@ -124,6 +124,7 @@ impl StorageState {
             kind,
             target,
             command,
+            note: normalize_optional_text(payload.note),
             fixed_args: normalize_optional_text(payload.fixed_args),
             runtime_args_template: normalize_optional_text(payload.runtime_args_template),
             working_dir: payload
@@ -159,6 +160,7 @@ impl StorageState {
                 target: path.to_string_lossy().to_string(),
                 name: Some(default_name_for_path(&path)),
                 command: None,
+                note: None,
                 fixed_args: None,
                 runtime_args_template: None,
                 working_dir: None,
@@ -204,6 +206,10 @@ impl StorageState {
             if matches!(item.kind, LaunchItemKind::Command) {
                 item.target = trimmed;
             }
+        }
+
+        if let Some(note) = payload.note {
+            item.note = note.and_then(normalize_text);
         }
 
         if let Some(fixed_args) = payload.fixed_args {
