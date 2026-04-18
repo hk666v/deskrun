@@ -66,3 +66,7 @@ export function setCloseOnLaunch(closeOnLaunch: boolean) {
 export function setWindowSize(width: number, height: number) {
   return invoke<BootstrapData>("set_window_size", { width, height });
 }
+
+export function syncWindowSize(width: number, height: number) {
+  return invoke<BootstrapData>("sync_window_size", { width, height });
+}

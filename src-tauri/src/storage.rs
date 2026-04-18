@@ -12,8 +12,7 @@ use crate::{
     icons,
     models::{
         BootstrapData, CreateItemPayload, Group, IconSource, LaunchItem, LaunchItemKind,
-        PersistedItems, Settings, UpdateItemPayload, MAX_WINDOW_HEIGHT, MAX_WINDOW_WIDTH,
-        MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH,
+        PersistedItems, Settings, UpdateItemPayload, WindowSizeLimits,
     },
 };
 
@@ -52,11 +51,12 @@ impl StorageState {
         Ok(storage)
     }
 
-    pub fn bootstrap(&self) -> BootstrapData {
+    pub fn bootstrap(&self, window_size_limits: WindowSizeLimits) -> BootstrapData {
         BootstrapData {
             items: self.sorted_items(),
             groups: self.sorted_groups(),
             settings: self.settings.clone(),
+            window_size_limits,
         }
     }
 
@@ -79,9 +79,14 @@ impl StorageState {
         self.persist_settings()
     }
 
-    pub fn set_window_size(&mut self, width: u32, height: u32) -> Result<()> {
-        self.settings.window_width = width.clamp(MIN_WINDOW_WIDTH, MAX_WINDOW_WIDTH);
-        self.settings.window_height = height.clamp(MIN_WINDOW_HEIGHT, MAX_WINDOW_HEIGHT);
+    pub fn set_window_size(
+        &mut self,
+        width: u32,
+        height: u32,
+        limits: &WindowSizeLimits,
+    ) -> Result<()> {
+        self.settings.window_width = width.clamp(limits.min_width, limits.max_width);
+        self.settings.window_height = height.clamp(limits.min_height, limits.max_height);
         self.persist_settings()
     }
 

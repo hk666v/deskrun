@@ -15,6 +15,7 @@ import {
   setCloseOnLaunch,
   setHotkey,
   setLaunchOnStartup,
+  syncWindowSize,
   setWindowSize,
   updateItem,
 } from "./lib/commands";
@@ -25,7 +26,7 @@ import { ItemGrid } from "./components/ItemGrid";
 import { LauncherShell } from "./components/LauncherShell";
 import { SearchBar } from "./components/SearchBar";
 import { SettingsPanel } from "./components/SettingsPanel";
-import type { Group, LaunchItem, Settings } from "./types";
+import type { Group, LaunchItem, Settings, WindowSizeLimits } from "./types";
 
 type EditorState =
   | { mode: "create-url"; item: null }
@@ -47,11 +48,21 @@ const DEFAULT_SETTINGS: Settings = {
   windowHeight: 560,
 };
 
+const DEFAULT_WINDOW_SIZE_LIMITS: WindowSizeLimits = {
+  minWidth: 760,
+  minHeight: 560,
+  maxWidth: 1400,
+  maxHeight: 960,
+};
+
 function App() {
   const currentWindow = getCurrentWindow();
   const [items, setItems] = createSignal<LaunchItem[]>([]);
   const [groups, setGroups] = createSignal<Group[]>([]);
   const [settings, setSettings] = createSignal<Settings>(DEFAULT_SETTINGS);
+  const [windowSizeLimits, setWindowSizeLimits] = createSignal<WindowSizeLimits>(
+    DEFAULT_WINDOW_SIZE_LIMITS,
+  );
   const [query, setQuery] = createSignal("");
   const [currentGroupId, setCurrentGroupId] = createSignal<string | null>(null);
   const [selectedItemId, setSelectedItemId] = createSignal<string | null>(null);
@@ -89,6 +100,7 @@ function App() {
     setItems(data.items);
     setGroups(data.groups);
     setSettings(data.settings);
+    setWindowSizeLimits(data.windowSizeLimits);
     syncSelection(data.items);
   };
 
@@ -202,6 +214,8 @@ function App() {
 
   onMount(async () => {
     await refresh();
+    let resizeSyncTimer: number | undefined;
+    let syncingResize = false;
 
     const unlistenFocus = await currentWindow.onFocusChanged(async ({ payload }) => {
       if (!payload && !dialogBusy()) {
@@ -223,6 +237,32 @@ function App() {
     const unlistenFocusSearch = await listen("deskrun://focus-search", () => {
       searchInput?.focus();
       searchInput?.select();
+    });
+
+    const unlistenResized = await currentWindow.onResized(async () => {
+      if (syncingResize) {
+        return;
+      }
+
+      window.clearTimeout(resizeSyncTimer);
+      resizeSyncTimer = window.setTimeout(async () => {
+        syncingResize = true;
+        try {
+          const [size, scaleFactor] = await Promise.all([
+            currentWindow.innerSize(),
+            currentWindow.scaleFactor(),
+          ]);
+          const width = Math.round(size.width / scaleFactor);
+          const height = Math.round(size.height / scaleFactor);
+          const data = await syncWindowSize(width, height);
+          setSettings(data.settings);
+          setWindowSizeLimits(data.windowSizeLimits);
+        } finally {
+          window.setTimeout(() => {
+            syncingResize = false;
+          }, 0);
+        }
+      }, 140);
     });
 
     const handleEscape = async (event: KeyboardEvent) => {
@@ -271,6 +311,8 @@ function App() {
       unlistenFocus();
       unlistenDragDrop();
       unlistenFocusSearch();
+      unlistenResized();
+      window.clearTimeout(resizeSyncTimer);
       window.removeEventListener("keydown", handleKeyDown, true);
       window.removeEventListener("keyup", handleEscape, true);
       document.removeEventListener("keydown", handleKeyDown, true);
@@ -390,26 +432,31 @@ function App() {
       <SettingsPanel
         open={settingsOpen()}
         settings={settings()}
+        windowSizeLimits={windowSizeLimits()}
         groups={groups()}
         onClose={() => setSettingsOpen(false)}
         onSetHotkey={async (value) => {
           const data = await setHotkey(value);
           setSettings(data.settings);
+          setWindowSizeLimits(data.windowSizeLimits);
           notify("Hotkey updated");
         }}
         onToggleStartup={async (value) => {
           const data = await setLaunchOnStartup(value);
           setSettings(data.settings);
+          setWindowSizeLimits(data.windowSizeLimits);
           notify(value ? "Launch at login enabled" : "Launch at login disabled");
         }}
         onToggleCloseOnLaunch={async (value) => {
           const data = await setCloseOnLaunch(value);
           setSettings(data.settings);
+          setWindowSizeLimits(data.windowSizeLimits);
           notify(value ? "Hide after launch enabled" : "Hide after launch disabled");
         }}
         onSetWindowSize={async (width, height) => {
           const data = await setWindowSize(width, height);
           setSettings(data.settings);
+          setWindowSizeLimits(data.windowSizeLimits);
           notify(
             `Window size updated to ${data.settings.windowWidth} x ${data.settings.windowHeight}`,
           );

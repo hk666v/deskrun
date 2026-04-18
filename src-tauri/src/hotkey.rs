@@ -5,7 +5,7 @@ use tauri::{
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
 
 use crate::models::{
-    MAX_WINDOW_HEIGHT, MAX_WINDOW_WIDTH, MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH,
+    MAX_WINDOW_WIDTH, MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH, WindowSizeLimits,
 };
 
 #[cfg(target_os = "windows")]
@@ -34,6 +34,8 @@ pub fn hide_main_window(app: &AppHandle) -> Result<()> {
 
 pub fn show_main_window(app: &AppHandle) -> Result<()> {
     let window = main_window(app)?;
+    let limits = window_size_limits()?;
+    apply_window_size_constraints(&window, limits.max_width, limits.max_height)?;
     center_window_on_cursor(&window)?;
     window.show()?;
     let _ = window.unminimize();
@@ -44,14 +46,33 @@ pub fn show_main_window(app: &AppHandle) -> Result<()> {
 
 pub fn apply_window_size(app: &AppHandle, width: u32, height: u32) -> Result<()> {
     let window = main_window(app)?;
-    let clamped_width = width.clamp(MIN_WINDOW_WIDTH, MAX_WINDOW_WIDTH);
-    let clamped_height = height.clamp(MIN_WINDOW_HEIGHT, MAX_WINDOW_HEIGHT);
+    let limits = window_size_limits()?;
+    let clamped_width = width.clamp(limits.min_width, limits.max_width);
+    let clamped_height = height.clamp(limits.min_height, limits.max_height);
+    apply_window_size_constraints(&window, limits.max_width, limits.max_height)?;
     window.set_size(Size::Logical(LogicalSize::new(
         clamped_width as f64,
         clamped_height as f64,
     )))?;
     center_window_on_cursor(&window)?;
     Ok(())
+}
+
+pub fn sync_window_size(app: &AppHandle, width: u32, height: u32) -> Result<WindowSizeLimits> {
+    let window = main_window(app)?;
+    let limits = window_size_limits()?;
+    let clamped_width = width.clamp(limits.min_width, limits.max_width);
+    let clamped_height = height.clamp(limits.min_height, limits.max_height);
+    apply_window_size_constraints(&window, limits.max_width, limits.max_height)?;
+
+    if clamped_width != width || clamped_height != height {
+        window.set_size(Size::Logical(LogicalSize::new(
+            clamped_width as f64,
+            clamped_height as f64,
+        )))?;
+    }
+
+    Ok(limits)
 }
 
 pub fn toggle_main_window(app: &AppHandle) -> Result<()> {
@@ -66,6 +87,44 @@ pub fn toggle_main_window(app: &AppHandle) -> Result<()> {
 fn main_window(app: &AppHandle) -> Result<WebviewWindow> {
     app.get_webview_window("main")
         .ok_or_else(|| anyhow!("main window is missing"))
+}
+
+pub fn window_size_limits() -> Result<WindowSizeLimits> {
+    #[cfg(not(target_os = "windows"))]
+    {
+        Ok(WindowSizeLimits {
+            min_width: MIN_WINDOW_WIDTH,
+            min_height: MIN_WINDOW_HEIGHT,
+            max_width: MAX_WINDOW_WIDTH,
+            max_height: 1080,
+        })
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let monitor = current_monitor_rect()?;
+        let available_width = (monitor.right - monitor.left).max(MIN_WINDOW_WIDTH as i32) as u32;
+        let available_height = (monitor.bottom - monitor.top).max(MIN_WINDOW_HEIGHT as i32) as u32;
+
+        Ok(WindowSizeLimits {
+            min_width: MIN_WINDOW_WIDTH,
+            min_height: MIN_WINDOW_HEIGHT,
+            max_width: available_width.min(MAX_WINDOW_WIDTH).max(MIN_WINDOW_WIDTH),
+            max_height: available_height.max(MIN_WINDOW_HEIGHT),
+        })
+    }
+}
+
+fn apply_window_size_constraints(
+    window: &WebviewWindow,
+    max_width: u32,
+    max_height: u32,
+) -> Result<()> {
+    window.set_max_size(Some(Size::Logical(LogicalSize::new(
+        max_width as f64,
+        max_height as f64,
+    ))))?;
+    Ok(())
 }
 
 fn center_window_on_cursor(window: &WebviewWindow) -> Result<()> {

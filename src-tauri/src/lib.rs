@@ -80,6 +80,7 @@ pub fn run() {
             commands::set_launch_on_startup,
             commands::set_close_on_launch,
             commands::set_window_size,
+            commands::sync_window_size,
         ])
         .run(tauri::generate_context!())
         .expect("error while running deskrun");

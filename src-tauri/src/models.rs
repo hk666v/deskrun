@@ -50,12 +50,20 @@ pub struct Settings {
     pub window_height: u32,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WindowSizeLimits {
+    pub min_width: u32,
+    pub min_height: u32,
+    pub max_width: u32,
+    pub max_height: u32,
+}
+
 pub const DEFAULT_WINDOW_WIDTH: u32 = 760;
 pub const DEFAULT_WINDOW_HEIGHT: u32 = 560;
 pub const MIN_WINDOW_WIDTH: u32 = 760;
 pub const MIN_WINDOW_HEIGHT: u32 = 560;
 pub const MAX_WINDOW_WIDTH: u32 = 1400;
-pub const MAX_WINDOW_HEIGHT: u32 = 960;
 
 impl Default for Settings {
     fn default() -> Self {
@@ -76,6 +84,7 @@ pub struct BootstrapData {
     pub items: Vec<LaunchItem>,
     pub groups: Vec<Group>,
     pub settings: Settings,
+    pub window_size_limits: WindowSizeLimits,
 }
 
 #[derive(Debug, Clone, Deserialize)]

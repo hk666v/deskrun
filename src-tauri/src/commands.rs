@@ -9,9 +9,12 @@ use crate::{
 };
 
 #[tauri::command]
-pub fn get_bootstrap_data(state: State<'_, SharedState>) -> Result<BootstrapData, String> {
+pub fn get_bootstrap_data(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+) -> Result<BootstrapData, String> {
     let storage = state.lock()?;
-    Ok(storage.bootstrap())
+    bootstrap_data(&app, &storage)
 }
 
 #[tauri::command]
@@ -128,7 +131,7 @@ pub fn set_hotkey(
     storage
         .set_hotkey(hotkey)
         .map_err(|error| error.to_string())?;
-    Ok(storage.bootstrap())
+    bootstrap_data(&app, &storage)
 }
 
 #[tauri::command]
@@ -139,11 +142,12 @@ pub fn set_launch_on_startup(
 ) -> Result<BootstrapData, String> {
     let mut storage = state.lock()?;
     apply_launch_on_startup(&app, &mut storage, enabled)?;
-    Ok(storage.bootstrap())
+    bootstrap_data(&app, &storage)
 }
 
 #[tauri::command]
 pub fn set_close_on_launch(
+    app: AppHandle,
     state: State<'_, SharedState>,
     close_on_launch: bool,
 ) -> Result<BootstrapData, String> {
@@ -151,7 +155,7 @@ pub fn set_close_on_launch(
     storage
         .set_close_on_launch(close_on_launch)
         .map_err(|error| error.to_string())?;
-    Ok(storage.bootstrap())
+    bootstrap_data(&app, &storage)
 }
 
 #[tauri::command]
@@ -162,11 +166,27 @@ pub fn set_window_size(
     height: u32,
 ) -> Result<BootstrapData, String> {
     hotkey::apply_window_size(&app, width, height).map_err(|error| error.to_string())?;
+    let limits = hotkey::window_size_limits().map_err(|error| error.to_string())?;
     let mut storage = state.lock()?;
     storage
-        .set_window_size(width, height)
+        .set_window_size(width, height, &limits)
         .map_err(|error| error.to_string())?;
-    Ok(storage.bootstrap())
+    bootstrap_data(&app, &storage)
+}
+
+#[tauri::command]
+pub fn sync_window_size(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+    width: u32,
+    height: u32,
+) -> Result<BootstrapData, String> {
+    let limits = hotkey::sync_window_size(&app, width, height).map_err(|error| error.to_string())?;
+    let mut storage = state.lock()?;
+    storage
+        .set_window_size(width, height, &limits)
+        .map_err(|error| error.to_string())?;
+    bootstrap_data(&app, &storage)
 }
 
 pub fn apply_launch_on_startup(
@@ -187,4 +207,13 @@ pub fn apply_launch_on_startup(
     storage
         .set_launch_on_startup(enabled)
         .map_err(|error| error.to_string())
+}
+
+fn bootstrap_data(
+    app: &AppHandle,
+    storage: &crate::storage::StorageState,
+) -> Result<BootstrapData, String> {
+    let limits = hotkey::window_size_limits().map_err(|error| error.to_string())?;
+    let _ = app;
+    Ok(storage.bootstrap(limits))
 }

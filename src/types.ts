@@ -29,10 +29,18 @@ export interface Settings {
   windowHeight: number;
 }
 
+export interface WindowSizeLimits {
+  minWidth: number;
+  minHeight: number;
+  maxWidth: number;
+  maxHeight: number;
+}
+
 export interface BootstrapData {
   items: LaunchItem[];
   groups: Group[];
   settings: Settings;
+  windowSizeLimits: WindowSizeLimits;
 }
 
 export interface CreateItemPayload {

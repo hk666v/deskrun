@@ -1,9 +1,10 @@
 import { For, Show, createEffect, createSignal } from "solid-js";
-import type { Group, Settings } from "../types";
+import type { Group, Settings, WindowSizeLimits } from "../types";
 
 interface SettingsPanelProps {
   open: boolean;
   settings: Settings;
+  windowSizeLimits: WindowSizeLimits;
   groups: Group[];
   onClose: () => void;
   onSetHotkey: (value: string) => void;
@@ -79,7 +80,8 @@ export function SettingsPanel(props: SettingsPanelProps) {
                 <div>
                   <p class="text-sm text-white/75">Window size</p>
                   <p class="mt-1 text-xs text-white/42">
-                    760-1400 px wide, 560-960 px high
+                    {props.windowSizeLimits.minWidth}-{props.windowSizeLimits.maxWidth} px wide,{" "}
+                    {props.windowSizeLimits.minHeight}-{props.windowSizeLimits.maxHeight} px high
                   </p>
                 </div>
                 <button
@@ -101,8 +103,8 @@ export function SettingsPanel(props: SettingsPanelProps) {
                   <span>Width</span>
                   <input
                     type="number"
-                    min="760"
-                    max="1400"
+                    min={props.windowSizeLimits.minWidth}
+                    max={props.windowSizeLimits.maxWidth}
                     step="20"
                     value={windowWidth()}
                     onInput={(event) => setWindowWidth(event.currentTarget.value)}
@@ -113,8 +115,8 @@ export function SettingsPanel(props: SettingsPanelProps) {
                   <span>Height</span>
                   <input
                     type="number"
-                    min="560"
-                    max="960"
+                    min={props.windowSizeLimits.minHeight}
+                    max={props.windowSizeLimits.maxHeight}
                     step="20"
                     value={windowHeight()}
                     onInput={(event) => setWindowHeight(event.currentTarget.value)}
