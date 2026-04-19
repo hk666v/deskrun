@@ -1,6 +1,8 @@
 # DeskRun
 
-DeskRun is a polished launcher for Windows 11 built with `Rust + Tauri 2 + SolidJS`.
+Fast, polished, and ultra-lightweight Windows 11 launcher with typical idle memory usage around `9 MB`.
+
+DeskRun is built with `Rust + Tauri 2 + SolidJS`.
 
 It is designed around one fast path:
 
@@ -8,10 +10,13 @@ It is designed around one fast path:
 
 The current version focuses on a clean desktop experience, stable launching, and manual control over your launcher items.
 
+![DeskRun main window](docs/images/deskrun-main-window.png)
+
 ## Features
 
 - Global hotkey support, defaulting to `Alt+Space`
 - Tray-based app lifecycle with background resident behavior
+- Extremely lightweight, with typical idle memory usage around `9 MB` on Windows 11
 - Add launcher items manually
 - Support for `.exe`, `.lnk`, folders, URLs, and `cmd` commands
 - Drag and drop import for files and folders
