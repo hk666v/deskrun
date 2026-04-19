@@ -276,6 +276,9 @@ impl StorageState {
                 .working_dir
                 .and_then(|value| normalize_text(value)),
             keep_open: payload.keep_open.unwrap_or(false),
+            is_favorite: false,
+            launch_count: 0,
+            last_launched_at: None,
             group_id: payload.group_id,
             icon_source: IconSource::Auto,
             icon_path: None,
@@ -398,6 +401,35 @@ impl StorageState {
     pub fn delete_item(&mut self, item_id: &str) -> Result<()> {
         self.items_data.items.retain(|item| item.id != item_id);
         self.persist_items()
+    }
+
+    pub fn toggle_favorite(&mut self, item_id: &str, favorite: bool) -> Result<LaunchItem> {
+        let item = self
+            .items_data
+            .items
+            .iter_mut()
+            .find(|item| item.id == item_id)
+            .ok_or_else(|| anyhow!("launch item not found"))?;
+        item.is_favorite = favorite;
+        item.updated_at = now_iso();
+        let updated = item.clone();
+        self.persist_items()?;
+        Ok(updated)
+    }
+
+    pub fn record_launch(&mut self, item_id: &str) -> Result<LaunchItem> {
+        let item = self
+            .items_data
+            .items
+            .iter_mut()
+            .find(|item| item.id == item_id)
+            .ok_or_else(|| anyhow!("launch item not found"))?;
+        item.launch_count = item.launch_count.saturating_add(1);
+        item.last_launched_at = Some(now_iso());
+        item.updated_at = now_iso();
+        let updated = item.clone();
+        self.persist_items()?;
+        Ok(updated)
     }
 
     pub fn reorder_items(&mut self, item_ids: Vec<String>) -> Result<Vec<LaunchItem>> {

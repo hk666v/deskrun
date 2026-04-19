@@ -104,7 +104,7 @@ pub fn launch_item(
     app: AppHandle,
     state: State<'_, SharedState>,
     item_id: String,
-) -> Result<(), String> {
+) -> Result<LaunchItem, String> {
     let (item, close_on_launch) = {
         let storage = state.lock()?;
         let item = storage
@@ -114,10 +114,28 @@ pub fn launch_item(
     };
 
     launcher::launch(&item).map_err(|error| error.to_string())?;
+    let updated = {
+        let mut storage = state.lock()?;
+        storage
+            .record_launch(&item_id)
+            .map_err(|error| error.to_string())?
+    };
     if close_on_launch {
         let _ = hotkey::hide_main_window(&app);
     }
-    Ok(())
+    Ok(updated)
+}
+
+#[tauri::command]
+pub fn toggle_favorite(
+    state: State<'_, SharedState>,
+    item_id: String,
+    favorite: bool,
+) -> Result<LaunchItem, String> {
+    let mut storage = state.lock()?;
+    storage
+        .toggle_favorite(&item_id, favorite)
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]

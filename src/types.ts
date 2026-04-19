@@ -12,6 +12,9 @@ export interface LaunchItem {
   runtimeArgs: string | null;
   workingDir: string | null;
   keepOpen: boolean;
+  isFavorite: boolean;
+  launchCount: number;
+  lastLaunchedAt: string | null;
   groupId: string | null;
   iconSource: IconSource;
   iconPath: string | null;

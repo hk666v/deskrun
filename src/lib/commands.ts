@@ -44,7 +44,11 @@ export function reorderGroups(groupIds: string[]) {
 }
 
 export function launchItem(itemId: string) {
-  return invoke<void>("launch_item", { itemId });
+  return invoke<LaunchItem>("launch_item", { itemId });
+}
+
+export function toggleFavorite(itemId: string, favorite: boolean) {
+  return invoke<LaunchItem>("toggle_favorite", { itemId, favorite });
 }
 
 export function importPaths(paths: string[]) {

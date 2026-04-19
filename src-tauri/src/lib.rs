@@ -81,6 +81,7 @@ pub fn run() {
             commands::delete_group,
             commands::reorder_groups,
             commands::launch_item,
+            commands::toggle_favorite,
             commands::import_paths,
             commands::set_hotkey,
             commands::set_launch_on_startup,

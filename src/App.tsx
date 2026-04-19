@@ -21,6 +21,7 @@ import {
   setLaunchOnStartup,
   syncWindowSize,
   setWindowSize,
+  toggleFavorite,
   updateItem,
 } from "./lib/commands";
 import { GroupTabs } from "./components/GroupTabs";
@@ -81,6 +82,9 @@ const DEFAULT_CONFIG_DIRECTORY: ConfigDirectoryInfo = {
   usingCustomPath: false,
 };
 
+const FAVORITES_VIEW_ID = "__favorites__";
+const RECENT_VIEW_ID = "__recent__";
+
 function App() {
   const currentWindow = getCurrentWindow();
   const [items, setItems] = createSignal<LaunchItem[]>([]);
@@ -115,12 +119,35 @@ function App() {
   const visibleItems = createMemo(() => {
     const term = query().trim();
     return searchIndex()
-      .filter(({ item }) =>
-        currentGroupId() ? item.groupId === currentGroupId() : true,
-      )
+      .filter(({ item }) => {
+        const view = currentGroupId();
+        if (view === FAVORITES_VIEW_ID) {
+          return item.isFavorite;
+        }
+        if (view === RECENT_VIEW_ID) {
+          return item.lastLaunchedAt !== null;
+        }
+        return view ? item.groupId === view : true;
+      })
       .filter(({ search }) => matchesSearch(search, term))
       .map(({ item }) => item)
-      .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+      .sort((a, b) => {
+        const view = currentGroupId();
+        if (view === RECENT_VIEW_ID) {
+          return (
+            (b.lastLaunchedAt ?? "").localeCompare(a.lastLaunchedAt ?? "") ||
+            b.launchCount - a.launchCount ||
+            a.name.localeCompare(b.name)
+          );
+        }
+        if (view === FAVORITES_VIEW_ID) {
+          return (
+            (b.lastLaunchedAt ?? "").localeCompare(a.lastLaunchedAt ?? "") ||
+            a.name.localeCompare(b.name)
+          );
+        }
+        return a.sortOrder - b.sortOrder || a.name.localeCompare(b.name);
+      });
   });
 
   const syncSelection = (nextItems: LaunchItem[]) => {
@@ -246,7 +273,10 @@ function App() {
   const performLaunch = async (item: LaunchItem) => {
     setContextMenu(null);
     setHoverPreview(null);
-    await launchItem(item.id);
+    const launched = await launchItem(item.id);
+    setItems((current) =>
+      current.map((entry) => (entry.id === launched.id ? launched : entry)),
+    );
   };
 
   const clearHoverPreview = () => {
@@ -278,7 +308,15 @@ function App() {
 
   const handleLaunch = async (item: LaunchItem) => {
     setContextMenu(null);
-    await performLaunch(item);
+    try {
+      await performLaunch(item);
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : "Launch failed";
+      notify(`Launch failed: ${message}`);
+    }
   };
 
   const handleDelete = async (item: LaunchItem) => {
@@ -298,6 +336,16 @@ function App() {
 
     await copyText(buildCommandPreview(item));
     notify("Command copied");
+  };
+
+  const handleToggleFavorite = async (item: LaunchItem) => {
+    setContextMenu(null);
+    clearHoverPreview();
+    const updated = await toggleFavorite(item.id, !item.isFavorite);
+    setItems((current) =>
+      current.map((entry) => (entry.id === updated.id ? updated : entry)),
+    );
+    notify(updated.isFavorite ? "Added to favorites" : "Removed from favorites");
   };
 
   const handleReorder = async (fromId: string, toId: string) => {
@@ -498,7 +546,11 @@ function App() {
         <ItemGrid
           items={visibleItems()}
           activeItemId={selectedItemId()}
-          sortable={!query()}
+          sortable={
+            !query() &&
+            currentGroupId() !== FAVORITES_VIEW_ID &&
+            currentGroupId() !== RECENT_VIEW_ID
+          }
           onSelect={(item) => setSelectedItemId(item.id)}
           onPreviewHover={scheduleHoverPreview}
           onPreviewLeave={clearHoverPreview}
@@ -564,6 +616,7 @@ function App() {
         x={contextMenu()?.x ?? 0}
         y={contextMenu()?.y ?? 0}
         onLaunch={handleLaunch}
+        onToggleFavorite={handleToggleFavorite}
         onCopyCommand={handleCopyCommand}
         onEdit={(item) => {
           setContextMenu(null);

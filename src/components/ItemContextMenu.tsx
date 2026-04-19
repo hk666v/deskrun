@@ -7,6 +7,7 @@ interface ItemContextMenuProps {
   x: number;
   y: number;
   onLaunch: (item: LaunchItem) => void;
+  onToggleFavorite: (item: LaunchItem) => void;
   onCopyCommand: (item: LaunchItem) => void;
   onEdit: (item: LaunchItem) => void;
   onDelete: (item: LaunchItem) => void;
@@ -27,6 +28,9 @@ export function ItemContextMenu(props: ItemContextMenuProps) {
             }}
           >
             <MenuButton onClick={() => props.onLaunch(item())}>Launch</MenuButton>
+            <MenuButton onClick={() => props.onToggleFavorite(item())}>
+              {item().isFavorite ? "Remove Favorite" : "Add Favorite"}
+            </MenuButton>
             <Show when={item().kind === "command"}>
               <MenuButton onClick={() => props.onCopyCommand(item())}>
                 Copy Command

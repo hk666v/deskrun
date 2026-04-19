@@ -19,6 +19,10 @@ pub fn launch(item: &LaunchItem) -> Result<()> {
 }
 
 fn launch_executable(target: &str) -> Result<()> {
+    if !Path::new(target).exists() {
+        return Err(anyhow!("executable not found: {}", target));
+    }
+
     Command::new(target)
         .spawn()
         .map(|_| ())
@@ -28,6 +32,10 @@ fn launch_executable(target: &str) -> Result<()> {
 fn shell_open(target: &str) -> Result<()> {
     if matches!(Path::new(target).extension().and_then(|ext| ext.to_str()), Some("exe")) {
         return launch_executable(target);
+    }
+
+    if !is_probable_url(target) && !Path::new(target).exists() {
+        return Err(anyhow!("target not found: {}", target));
     }
 
     Command::new("cmd")
@@ -83,4 +91,12 @@ fn compose_command(
     }
 
     Ok(segments.join(" "))
+}
+
+fn is_probable_url(target: &str) -> bool {
+    let value = target.trim().to_ascii_lowercase();
+    value.starts_with("http://")
+        || value.starts_with("https://")
+        || value.starts_with("mailto:")
+        || value.starts_with("tel:")
 }

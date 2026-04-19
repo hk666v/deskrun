@@ -104,19 +104,32 @@ export function ItemCard(props: ItemCardProps) {
           </Show>
         </div>
 
-        <div class="flex min-h-12 min-w-0 items-start justify-between gap-2">
-          <div class="flex min-h-12 min-w-0 flex-1 flex-col justify-center">
-              <div
-                class="block truncate text-[15px] font-semibold leading-5 text-white"
-              >
-                {props.item.name}
-              </div>
-            <div class="mt-1 truncate whitespace-nowrap text-[10px] uppercase tracking-[0.16em] text-white/30">
-              Quick Launch
+        <div class="flex min-h-12 min-w-0 flex-col items-start justify-center gap-2">
+          <div class="min-w-0 self-stretch">
+            <div
+              class="overflow-hidden text-[15px] font-semibold leading-5 text-white [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2] break-all"
+            >
+              {props.item.name}
             </div>
           </div>
-          <div class="shrink-0 self-start rounded-full border border-white/10 bg-black/12 px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-white/38">
-            {kindLabel()}
+
+          <div class="flex flex-wrap items-center gap-1.5">
+            <Show when={props.item.isFavorite}>
+              <div
+                class="flex h-6 items-center gap-1 rounded-full border border-amber-200/20 bg-amber-300/10 px-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
+                title="Favorite"
+                aria-label="Favorite"
+              >
+                <span class="h-2 w-2 rounded-full bg-amber-200/90" />
+                <span class="text-[9px] font-semibold uppercase tracking-[0.14em] text-amber-100/78">
+                  Fav
+                </span>
+              </div>
+            </Show>
+
+            <div class="rounded-full border border-white/10 bg-black/12 px-2.5 py-1 text-[9px] font-semibold uppercase tracking-[0.14em] text-white/38">
+              {kindLabel()}
+            </div>
           </div>
         </div>
       </div>

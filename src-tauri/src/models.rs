@@ -32,6 +32,12 @@ pub struct LaunchItem {
     pub working_dir: Option<String>,
     #[serde(default)]
     pub keep_open: bool,
+    #[serde(default)]
+    pub is_favorite: bool,
+    #[serde(default)]
+    pub launch_count: u32,
+    #[serde(default)]
+    pub last_launched_at: Option<String>,
     pub group_id: Option<String>,
     pub icon_source: IconSource,
     pub icon_path: Option<String>,
