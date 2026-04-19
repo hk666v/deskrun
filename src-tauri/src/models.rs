@@ -57,6 +57,8 @@ pub struct Settings {
     pub theme_mode: String,
     pub window_width: u32,
     pub window_height: u32,
+    pub window_x: Option<i32>,
+    pub window_y: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -91,6 +93,8 @@ impl Default for Settings {
             theme_mode: "system".to_string(),
             window_width: DEFAULT_WINDOW_WIDTH,
             window_height: DEFAULT_WINDOW_HEIGHT,
+            window_x: None,
+            window_y: None,
         }
     }
 }

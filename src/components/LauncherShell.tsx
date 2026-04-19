@@ -9,6 +9,10 @@ interface LauncherShellProps {
 export function LauncherShell(props: LauncherShellProps) {
   const currentWindow = getCurrentWindow();
 
+  const startDrag = async () => {
+    await currentWindow.startDragging();
+  };
+
   const startResize = async (direction: ResizeDirection) => {
     await currentWindow.startResizeDragging(direction);
   };
@@ -18,6 +22,17 @@ export function LauncherShell(props: LauncherShellProps) {
       tabIndex={-1}
       class="relative h-screen overflow-hidden rounded-[32px] bg-[linear-gradient(180deg,#121a27,#161f2d)] p-5 text-white outline-none"
     >
+      <div
+        class="absolute left-5 right-5 top-5 z-10 h-[74px] cursor-move select-none"
+        onMouseDown={(event) => {
+          if (event.button !== 0) {
+            return;
+          }
+          event.preventDefault();
+          void startDrag();
+        }}
+      />
+
       <div class="relative h-full">{props.children}</div>
 
       <ResizeHandle

@@ -33,6 +33,8 @@ export interface Settings {
   themeMode: "system";
   windowWidth: number;
   windowHeight: number;
+  windowX?: number | null;
+  windowY?: number | null;
 }
 
 export interface WindowSizeLimits {

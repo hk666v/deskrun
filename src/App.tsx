@@ -453,7 +453,9 @@ function App() {
   return (
     <LauncherShell dragging={draggingExternal()}>
       <div class="flex h-full flex-col gap-4">
-        <div class="flex items-center justify-between gap-4 rounded-[24px] px-1 py-1">
+        <div
+          class="flex items-center justify-between gap-4 rounded-[24px] px-1 py-1 select-none"
+        >
           <div>
             <p class="text-[11px] uppercase tracking-[0.28em] text-white/36">
               Windows 11 Launcher

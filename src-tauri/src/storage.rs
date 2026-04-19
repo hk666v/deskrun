@@ -174,6 +174,12 @@ impl StorageState {
         self.persist_settings()
     }
 
+    pub fn set_window_position(&mut self, x: i32, y: i32) -> Result<()> {
+        self.settings.window_x = Some(x);
+        self.settings.window_y = Some(y);
+        self.persist_settings()
+    }
+
     pub fn create_item(&mut self, payload: CreateItemPayload) -> Result<LaunchItem> {
         let now = now_iso();
         let id = Uuid::new_v4().to_string();
