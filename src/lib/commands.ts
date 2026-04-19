@@ -70,3 +70,11 @@ export function setWindowSize(width: number, height: number) {
 export function syncWindowSize(width: number, height: number) {
   return invoke<BootstrapData>("sync_window_size", { width, height });
 }
+
+export function setConfigDirectory(path: string | null) {
+  return invoke<BootstrapData>("set_config_directory", { path });
+}
+
+export function openConfigDirectory() {
+  return invoke<void>("open_config_directory");
+}

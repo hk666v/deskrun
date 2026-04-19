@@ -136,6 +136,34 @@ Current persisted files:
 - `items.json`
 - `icons/`
 
+Default Windows location:
+
+```text
+C:\Users\<your-user>\AppData\Roaming\com.deskrun.desktop\
+```
+
+### Custom Config Folder
+
+DeskRun also supports a user-configurable config directory.
+
+You can change it from:
+
+`Settings -> Config folder`
+
+Supported actions:
+
+- choose a custom folder
+- open the current config folder
+- reset back to the default folder
+
+When you switch the config folder, DeskRun will migrate the current data to the new location, including:
+
+- `settings.json`
+- `items.json`
+- `icons/`
+
+The selected config folder is remembered and used again on the next app launch.
+
 ## Project Structure
 
 ```text

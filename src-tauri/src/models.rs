@@ -67,6 +67,14 @@ pub struct WindowSizeLimits {
     pub max_height: u32,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfigDirectoryInfo {
+    pub current_path: String,
+    pub default_path: String,
+    pub using_custom_path: bool,
+}
+
 pub const DEFAULT_WINDOW_WIDTH: u32 = 760;
 pub const DEFAULT_WINDOW_HEIGHT: u32 = 560;
 pub const MIN_WINDOW_WIDTH: u32 = 760;
@@ -93,6 +101,7 @@ pub struct BootstrapData {
     pub groups: Vec<Group>,
     pub settings: Settings,
     pub window_size_limits: WindowSizeLimits,
+    pub config_directory: ConfigDirectoryInfo,
 }
 
 #[derive(Debug, Clone, Deserialize)]

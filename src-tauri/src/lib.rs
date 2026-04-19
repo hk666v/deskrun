@@ -81,6 +81,8 @@ pub fn run() {
             commands::set_close_on_launch,
             commands::set_window_size,
             commands::sync_window_size,
+            commands::set_config_directory,
+            commands::open_config_directory,
         ])
         .run(tauri::generate_context!())
         .expect("error while running deskrun");

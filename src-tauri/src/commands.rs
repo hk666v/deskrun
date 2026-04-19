@@ -190,6 +190,37 @@ pub fn sync_window_size(
     bootstrap_data(&app, &storage)
 }
 
+#[tauri::command]
+pub fn set_config_directory(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+    path: Option<String>,
+) -> Result<BootstrapData, String> {
+    let mut storage = state.lock()?;
+    let next = storage
+        .relocate(&app, path.as_deref())
+        .map_err(|error| error.to_string())?;
+    *storage = next;
+    bootstrap_data(&app, &storage)
+}
+
+#[tauri::command]
+pub fn open_config_directory(
+    state: State<'_, SharedState>,
+) -> Result<(), String> {
+    let storage = state.lock()?;
+    std::process::Command::new("cmd.exe")
+        .args([
+            "/C",
+            "start",
+            "",
+            storage.current_data_dir().to_string_lossy().as_ref(),
+        ])
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| error.to_string())
+}
+
 pub fn apply_launch_on_startup(
     app: &AppHandle,
     storage: &mut crate::storage::StorageState,

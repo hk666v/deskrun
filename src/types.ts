@@ -42,11 +42,18 @@ export interface WindowSizeLimits {
   maxHeight: number;
 }
 
+export interface ConfigDirectoryInfo {
+  currentPath: string;
+  defaultPath: string;
+  usingCustomPath: boolean;
+}
+
 export interface BootstrapData {
   items: LaunchItem[];
   groups: Group[];
   settings: Settings;
   windowSizeLimits: WindowSizeLimits;
+  configDirectory: ConfigDirectoryInfo;
 }
 
 export interface CreateItemPayload {

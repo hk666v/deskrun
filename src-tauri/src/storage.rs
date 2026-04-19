@@ -11,12 +11,15 @@ use uuid::Uuid;
 use crate::{
     icons,
     models::{
-        BootstrapData, CreateItemPayload, Group, IconSource, LaunchItem, LaunchItemKind,
-        PersistedItems, Settings, UpdateItemPayload, WindowSizeLimits,
+        BootstrapData, ConfigDirectoryInfo, CreateItemPayload, Group, IconSource, LaunchItem,
+        LaunchItemKind, PersistedItems, Settings, UpdateItemPayload, WindowSizeLimits,
     },
 };
 
 pub struct StorageState {
+    default_data_dir: PathBuf,
+    data_dir: PathBuf,
+    config_location_path: PathBuf,
     pub icons_dir: PathBuf,
     items_path: PathBuf,
     settings_path: PathBuf,
@@ -24,22 +27,42 @@ pub struct StorageState {
     settings: Settings,
 }
 
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct ConfigLocationFile {
+    custom_data_dir: Option<String>,
+}
+
 impl StorageState {
     pub fn load(app: &AppHandle) -> Result<Self> {
-        let data_dir = app
+        let default_data_dir = app
             .path()
             .app_data_dir()
             .context("failed to resolve app data directory")?;
+        fs::create_dir_all(&default_data_dir).context("failed to create app data directory")?;
+        let config_location_path = default_data_dir.join("config-location.json");
+        let location_file =
+            read_json::<ConfigLocationFile>(&config_location_path)?.unwrap_or_default();
+        let data_dir = location_file
+            .custom_data_dir
+            .as_deref()
+            .map(PathBuf::from)
+            .filter(|path| !path.as_os_str().is_empty())
+            .unwrap_or_else(|| default_data_dir.clone());
         let icons_dir = data_dir.join("icons");
         let items_path = data_dir.join("items.json");
         let settings_path = data_dir.join("settings.json");
 
+        fs::create_dir_all(&data_dir).context("failed to create data directory")?;
         fs::create_dir_all(&icons_dir).context("failed to create icons directory")?;
 
         let items_data = read_json::<PersistedItems>(&items_path)?.unwrap_or_default();
         let settings = read_json::<Settings>(&settings_path)?.unwrap_or_default();
 
         let mut storage = Self {
+            default_data_dir,
+            data_dir,
+            config_location_path,
             icons_dir,
             items_path,
             settings_path,
@@ -57,11 +80,72 @@ impl StorageState {
             groups: self.sorted_groups(),
             settings: self.settings.clone(),
             window_size_limits,
+            config_directory: self.config_directory_info(),
         }
     }
 
     pub fn settings(&self) -> &Settings {
         &self.settings
+    }
+
+    pub fn config_directory_info(&self) -> ConfigDirectoryInfo {
+        ConfigDirectoryInfo {
+            current_path: self.data_dir.to_string_lossy().to_string(),
+            default_path: self.default_data_dir.to_string_lossy().to_string(),
+            using_custom_path: self.data_dir != self.default_data_dir,
+        }
+    }
+
+    pub fn current_data_dir(&self) -> &Path {
+        &self.data_dir
+    }
+
+    pub fn relocate(&self, app: &AppHandle, requested_dir: Option<&str>) -> Result<Self> {
+        let next_dir = requested_dir
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(PathBuf::from)
+            .unwrap_or_else(|| self.default_data_dir.clone());
+
+        if next_dir == self.data_dir {
+            if next_dir == self.default_data_dir {
+                let _ = fs::remove_file(&self.config_location_path);
+            }
+            return Self::load(app);
+        }
+
+        fs::create_dir_all(&next_dir).with_context(|| {
+            format!("failed to create config directory {}", next_dir.display())
+        })?;
+
+        let next_icons_dir = next_dir.join("icons");
+        fs::create_dir_all(&next_icons_dir).with_context(|| {
+            format!(
+                "failed to create icons directory in {}",
+                next_icons_dir.display()
+            )
+        })?;
+
+        let mut items_data = self.items_data.clone();
+        remap_icon_paths(&mut items_data.items, &next_icons_dir);
+        write_json(&next_dir.join("items.json"), &items_data)?;
+        write_json(&next_dir.join("settings.json"), &self.settings)?;
+        copy_directory_contents(&self.icons_dir, &next_icons_dir)?;
+
+        let next_location = ConfigLocationFile {
+            custom_data_dir: if next_dir == self.default_data_dir {
+                None
+            } else {
+                Some(next_dir.to_string_lossy().to_string())
+            },
+        };
+        if next_location.custom_data_dir.is_some() {
+            write_json(&self.config_location_path, &next_location)?;
+        } else {
+            let _ = fs::remove_file(&self.config_location_path);
+        }
+
+        Self::load(app)
     }
 
     pub fn set_launch_on_startup(&mut self, enabled: bool) -> Result<()> {
@@ -268,9 +352,11 @@ impl StorageState {
     }
 
     pub fn create_group(&mut self, name: String) -> Result<Group> {
+        let normalized_name = normalize_group_name(&name)?;
+        ensure_group_name_available(&self.items_data.groups, &normalized_name, None)?;
         let group = Group {
             id: Uuid::new_v4().to_string(),
-            name,
+            name: normalized_name,
             sort_order: self.items_data.groups.len() as i32,
         };
         self.items_data.groups.push(group.clone());
@@ -279,13 +365,15 @@ impl StorageState {
     }
 
     pub fn rename_group(&mut self, group_id: &str, name: String) -> Result<Vec<Group>> {
+        let normalized_name = normalize_group_name(&name)?;
+        ensure_group_name_available(&self.items_data.groups, &normalized_name, Some(group_id))?;
         let group = self
             .items_data
             .groups
             .iter_mut()
             .find(|group| group.id == group_id)
             .ok_or_else(|| anyhow!("group not found"))?;
-        group.name = name;
+        group.name = normalized_name;
         self.persist_items()?;
         Ok(self.sorted_groups())
     }
@@ -453,4 +541,74 @@ fn normalize_text(value: String) -> Option<String> {
     } else {
         Some(trimmed)
     }
+}
+
+fn normalize_group_name(value: &str) -> Result<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err(anyhow!("group name cannot be empty"));
+    }
+
+    Ok(trimmed.to_string())
+}
+
+fn ensure_group_name_available(groups: &[Group], name: &str, exclude_id: Option<&str>) -> Result<()> {
+    let exists = groups.iter().any(|group| {
+        Some(group.id.as_str()) != exclude_id && group.name.eq_ignore_ascii_case(name)
+    });
+
+    if exists {
+        Err(anyhow!("group name already exists"))
+    } else {
+        Ok(())
+    }
+}
+
+fn remap_icon_paths(items: &mut [LaunchItem], next_icons_dir: &Path) {
+    for item in items {
+        let Some(current_path) = item.icon_path.as_deref() else {
+            continue;
+        };
+
+        let Some(file_name) = Path::new(current_path).file_name() else {
+            continue;
+        };
+
+        item.icon_path = Some(next_icons_dir.join(file_name).to_string_lossy().to_string());
+    }
+}
+
+fn copy_directory_contents(from: &Path, to: &Path) -> Result<()> {
+    if !from.exists() {
+        return Ok(());
+    }
+
+    for entry in fs::read_dir(from)
+        .with_context(|| format!("failed to read {}", from.display()))?
+    {
+        let entry = entry?;
+        let source = entry.path();
+        let destination = to.join(entry.file_name());
+
+        if entry
+            .file_type()
+            .with_context(|| format!("failed to inspect {}", source.display()))?
+            .is_dir()
+        {
+            fs::create_dir_all(&destination).with_context(|| {
+                format!("failed to create directory {}", destination.display())
+            })?;
+            copy_directory_contents(&source, &destination)?;
+        } else {
+            fs::copy(&source, &destination).with_context(|| {
+                format!(
+                    "failed to copy {} to {}",
+                    source.display(),
+                    destination.display()
+                )
+            })?;
+        }
+    }
+
+    Ok(())
 }

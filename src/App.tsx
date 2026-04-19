@@ -10,8 +10,10 @@ import {
   getBootstrapData,
   importPaths,
   launchItem,
+  openConfigDirectory,
   renameGroup,
   reorderItems,
+  setConfigDirectory,
   setCloseOnLaunch,
   setHotkey,
   setLaunchOnStartup,
@@ -29,7 +31,13 @@ import { SearchBar } from "./components/SearchBar";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { copyText } from "./lib/clipboard";
 import { buildCommandPreview, requiresRuntimeTarget } from "./lib/command-preview";
-import type { Group, LaunchItem, Settings, WindowSizeLimits } from "./types";
+import type {
+  ConfigDirectoryInfo,
+  Group,
+  LaunchItem,
+  Settings,
+  WindowSizeLimits,
+} from "./types";
 
 type EditorState =
   | { mode: "create-url"; item: null }
@@ -70,11 +78,19 @@ const DEFAULT_WINDOW_SIZE_LIMITS: WindowSizeLimits = {
   maxHeight: 960,
 };
 
+const DEFAULT_CONFIG_DIRECTORY: ConfigDirectoryInfo = {
+  currentPath: "",
+  defaultPath: "",
+  usingCustomPath: false,
+};
+
 function App() {
   const currentWindow = getCurrentWindow();
   const [items, setItems] = createSignal<LaunchItem[]>([]);
   const [groups, setGroups] = createSignal<Group[]>([]);
   const [settings, setSettings] = createSignal<Settings>(DEFAULT_SETTINGS);
+  const [configDirectory, setConfigDirectoryInfo] =
+    createSignal<ConfigDirectoryInfo>(DEFAULT_CONFIG_DIRECTORY);
   const [windowSizeLimits, setWindowSizeLimits] = createSignal<WindowSizeLimits>(
     DEFAULT_WINDOW_SIZE_LIMITS,
   );
@@ -120,6 +136,7 @@ function App() {
     setItems(data.items);
     setGroups(data.groups);
     setSettings(data.settings);
+    setConfigDirectoryInfo(data.configDirectory);
     setWindowSizeLimits(data.windowSizeLimits);
     syncSelection(data.items);
   };
@@ -663,6 +680,7 @@ function App() {
       <SettingsPanel
         open={settingsOpen()}
         settings={settings()}
+        configDirectory={configDirectory()}
         windowSizeLimits={windowSizeLimits()}
         groups={groups()}
         onClose={() => setSettingsOpen(false)}
@@ -687,10 +705,37 @@ function App() {
         onSetWindowSize={async (width, height) => {
           const data = await setWindowSize(width, height);
           setSettings(data.settings);
+          setConfigDirectoryInfo(data.configDirectory);
           setWindowSizeLimits(data.windowSizeLimits);
           notify(
             `Window size updated to ${data.settings.windowWidth} x ${data.settings.windowHeight}`,
           );
+        }}
+        onChooseConfigDirectory={async () => {
+          const result = await open({
+            directory: true,
+            multiple: false,
+          });
+          if (typeof result !== "string") {
+            return;
+          }
+
+          const data = await setConfigDirectory(result);
+          setSettings(data.settings);
+          setConfigDirectoryInfo(data.configDirectory);
+          setWindowSizeLimits(data.windowSizeLimits);
+          notify("Config folder updated");
+        }}
+        onOpenConfigDirectory={async () => {
+          await openConfigDirectory();
+          notify("Config folder opened");
+        }}
+        onResetConfigDirectory={async () => {
+          const data = await setConfigDirectory(null);
+          setSettings(data.settings);
+          setConfigDirectoryInfo(data.configDirectory);
+          setWindowSizeLimits(data.windowSizeLimits);
+          notify("Config folder reset to default");
         }}
         onCreateGroup={async (name) => {
           const group = await createGroup(name);
