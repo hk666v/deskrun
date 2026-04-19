@@ -155,6 +155,8 @@ Supported actions:
 - choose a custom folder
 - open the current config folder
 - reset back to the default folder
+- export the current config as a portable folder
+- import a previously exported config folder
 
 When you switch the config folder, DeskRun will migrate the current data to the new location, including:
 
@@ -163,6 +165,18 @@ When you switch the config folder, DeskRun will migrate the current data to the 
 - `icons/`
 
 The selected config folder is remembered and used again on the next app launch.
+
+### Import / Export Config
+
+DeskRun can export the current local configuration to a standalone folder that includes:
+
+- `settings.json`
+- `items.json`
+- `icons/`
+
+You can later import that folder back into DeskRun.
+
+Importing a config folder replaces the current local launcher data in the active config directory.
 
 ## Project Structure
 

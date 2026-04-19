@@ -7,7 +7,9 @@ import {
   createItem,
   deleteGroup,
   deleteItem,
+  exportConfig,
   getBootstrapData,
+  importConfig,
   importPaths,
   launchItem,
   openConfigDirectory,
@@ -132,14 +134,18 @@ function App() {
     }
   };
 
-  const refresh = async () => {
-    const data = await getBootstrapData();
+  const applyBootstrapData = (data: Awaited<ReturnType<typeof getBootstrapData>>) => {
     setItems(data.items);
     setGroups(data.groups);
     setSettings(data.settings);
     setConfigDirectoryInfo(data.configDirectory);
     setWindowSizeLimits(data.windowSizeLimits);
     syncSelection(data.items);
+  };
+
+  const refresh = async () => {
+    const data = await getBootstrapData();
+    applyBootstrapData(data);
   };
 
   const hoverPreviewPosition = createMemo(() => {
@@ -688,6 +694,31 @@ function App() {
           setConfigDirectoryInfo(data.configDirectory);
           setWindowSizeLimits(data.windowSizeLimits);
           notify("Config folder reset to default");
+        }}
+        onExportConfig={async () => {
+          const result = await open({
+            directory: true,
+            multiple: false,
+          });
+          if (typeof result !== "string") {
+            return;
+          }
+
+          const exportedPath = await exportConfig(result);
+          notify(`Config exported to ${exportedPath}`);
+        }}
+        onImportConfig={async () => {
+          const result = await open({
+            directory: true,
+            multiple: false,
+          });
+          if (typeof result !== "string") {
+            return;
+          }
+
+          const data = await importConfig(result);
+          applyBootstrapData(data);
+          notify("Config imported");
         }}
         onCreateGroup={async (name) => {
           const group = await createGroup(name);

@@ -204,6 +204,46 @@ pub fn set_config_directory(
 }
 
 #[tauri::command]
+pub fn export_config(
+    state: State<'_, SharedState>,
+    destination_dir: String,
+) -> Result<String, String> {
+    let storage = state.lock()?;
+    storage
+        .export_to_directory(&destination_dir)
+        .map(|path| path.to_string_lossy().to_string())
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn import_config(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+    source_dir: String,
+) -> Result<BootstrapData, String> {
+    let imported_settings = {
+        let mut storage = state.lock()?;
+        storage
+            .import_from_directory(&source_dir)
+            .map_err(|error| error.to_string())?;
+        storage.settings().clone()
+    };
+
+    hotkey::register_hotkey(&app, &imported_settings.hotkey)
+        .map_err(|error| error.to_string())?;
+    hotkey::apply_window_size(
+        &app,
+        imported_settings.window_width,
+        imported_settings.window_height,
+    )
+    .map_err(|error| error.to_string())?;
+
+    let mut storage = state.lock()?;
+    apply_launch_on_startup(&app, &mut storage, imported_settings.launch_on_startup)?;
+    bootstrap_data(&app, &storage)
+}
+
+#[tauri::command]
 pub fn open_config_directory(
     state: State<'_, SharedState>,
 ) -> Result<(), String> {

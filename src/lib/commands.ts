@@ -75,6 +75,14 @@ export function setConfigDirectory(path: string | null) {
   return invoke<BootstrapData>("set_config_directory", { path });
 }
 
+export function exportConfig(destinationDir: string) {
+  return invoke<string>("export_config", { destinationDir });
+}
+
+export function importConfig(sourceDir: string) {
+  return invoke<BootstrapData>("import_config", { sourceDir });
+}
+
 export function openConfigDirectory() {
   return invoke<void>("open_config_directory");
 }

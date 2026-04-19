@@ -148,6 +148,61 @@ impl StorageState {
         Self::load(app)
     }
 
+    pub fn export_to_directory(&self, destination_root: &str) -> Result<PathBuf> {
+        let destination_root = PathBuf::from(destination_root.trim());
+        if destination_root.as_os_str().is_empty() {
+            return Err(anyhow!("export destination cannot be empty"));
+        }
+
+        fs::create_dir_all(&destination_root).with_context(|| {
+            format!(
+                "failed to create export destination {}",
+                destination_root.display()
+            )
+        })?;
+
+        let export_dir = unique_export_dir(&destination_root);
+        let export_icons_dir = export_dir.join("icons");
+        fs::create_dir_all(&export_icons_dir).with_context(|| {
+            format!("failed to create export icons directory {}", export_icons_dir.display())
+        })?;
+
+        let mut items_data = self.items_data.clone();
+        remap_icon_paths(&mut items_data.items, &export_icons_dir);
+        write_json(&export_dir.join("items.json"), &items_data)?;
+        write_json(&export_dir.join("settings.json"), &self.settings)?;
+        copy_directory_contents(&self.icons_dir, &export_icons_dir)?;
+
+        Ok(export_dir)
+    }
+
+    pub fn import_from_directory(&mut self, source_dir: &str) -> Result<()> {
+        let source_dir = PathBuf::from(source_dir.trim());
+        if source_dir.as_os_str().is_empty() {
+            return Err(anyhow!("import source cannot be empty"));
+        }
+
+        let items_path = source_dir.join("items.json");
+        let settings_path = source_dir.join("settings.json");
+        let icons_dir = source_dir.join("icons");
+
+        let mut items_data = read_json::<PersistedItems>(&items_path)?
+            .ok_or_else(|| anyhow!("items.json was not found in {}", source_dir.display()))?;
+        let settings = read_json::<Settings>(&settings_path)?
+            .ok_or_else(|| anyhow!("settings.json was not found in {}", source_dir.display()))?;
+
+        fs::create_dir_all(&self.data_dir).context("failed to create data directory")?;
+        clear_directory_contents(&self.icons_dir)?;
+        fs::create_dir_all(&self.icons_dir).context("failed to recreate icons directory")?;
+        copy_directory_contents(&icons_dir, &self.icons_dir)?;
+
+        remap_icon_paths(&mut items_data.items, &self.icons_dir);
+        self.items_data = items_data;
+        self.settings = settings;
+        self.normalize();
+        self.persist_all()
+    }
+
     pub fn set_launch_on_startup(&mut self, enabled: bool) -> Result<()> {
         self.settings.launch_on_startup = enabled;
         self.persist_settings()
@@ -536,6 +591,17 @@ fn now_iso() -> String {
     Utc::now().to_rfc3339()
 }
 
+fn unique_export_dir(destination_root: &Path) -> PathBuf {
+    let base_name = format!("deskrun-export-{}", Utc::now().format("%Y%m%d-%H%M%S"));
+    let mut candidate = destination_root.join(&base_name);
+    let mut suffix = 1;
+    while candidate.exists() {
+        candidate = destination_root.join(format!("{base_name}-{suffix}"));
+        suffix += 1;
+    }
+    candidate
+}
+
 fn normalize_optional_text(value: Option<String>) -> Option<String> {
     value.and_then(normalize_text)
 }
@@ -613,6 +679,33 @@ fn copy_directory_contents(from: &Path, to: &Path) -> Result<()> {
                     destination.display()
                 )
             })?;
+        }
+    }
+
+    Ok(())
+}
+
+fn clear_directory_contents(path: &Path) -> Result<()> {
+    if !path.exists() {
+        return Ok(());
+    }
+
+    for entry in fs::read_dir(path)
+        .with_context(|| format!("failed to read {}", path.display()))?
+    {
+        let entry = entry?;
+        let target = entry.path();
+
+        if entry
+            .file_type()
+            .with_context(|| format!("failed to inspect {}", target.display()))?
+            .is_dir()
+        {
+            fs::remove_dir_all(&target)
+                .with_context(|| format!("failed to remove {}", target.display()))?;
+        } else {
+            fs::remove_file(&target)
+                .with_context(|| format!("failed to remove {}", target.display()))?;
         }
     }
 

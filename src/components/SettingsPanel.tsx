@@ -20,6 +20,8 @@ interface SettingsPanelProps {
   onChooseConfigDirectory: () => void;
   onOpenConfigDirectory: () => void;
   onResetConfigDirectory: () => void;
+  onExportConfig: () => void | Promise<void>;
+  onImportConfig: () => void | Promise<void>;
   onCreateGroup: (name: string) => void | Promise<void>;
   onRenameGroup: (group: Group, name: string) => void | Promise<void>;
   onDeleteGroup: (group: Group) => void;
@@ -195,6 +197,28 @@ export function SettingsPanel(props: SettingsPanelProps) {
                   >
                     Use Default
                   </button>
+                </div>
+
+                <div class="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={props.onExportConfig}
+                    class="rounded-xl border border-white/12 bg-white/[0.05] px-3 py-2 text-xs font-medium text-white/78 transition hover:bg-white/[0.1]"
+                  >
+                    Export Config
+                  </button>
+                  <button
+                    type="button"
+                    onClick={props.onImportConfig}
+                    class="rounded-xl border border-white/12 bg-white/[0.05] px-3 py-2 text-xs font-medium text-white/78 transition hover:bg-white/[0.1]"
+                  >
+                    Import Config
+                  </button>
+                </div>
+
+                <div class="mt-3 text-[11px] leading-5 text-white/38">
+                  Export creates a full config folder. Import replaces the current local settings,
+                  items, and cached icons.
                 </div>
 
                 <Show when={props.configDirectory.usingCustomPath}>

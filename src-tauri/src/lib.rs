@@ -88,6 +88,8 @@ pub fn run() {
             commands::set_window_size,
             commands::sync_window_size,
             commands::set_config_directory,
+            commands::export_config,
+            commands::import_config,
             commands::open_config_directory,
         ])
         .run(tauri::generate_context!())
