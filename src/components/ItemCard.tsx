@@ -77,7 +77,7 @@ export function ItemCard(props: ItemCardProps) {
       onDragStart={props.onDragStart}
       onDragOver={props.onDragOver}
       onDrop={props.onDrop}
-      class={`group relative grid min-h-[192px] min-w-0 w-full grid-rows-[auto_minmax(0,1fr)_auto] gap-3 overflow-hidden rounded-[24px] border px-4 py-4 text-left transition duration-200 ${
+      class={`group relative grid min-h-[178px] min-w-0 w-full grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-hidden rounded-[24px] border px-4 py-4 text-left transition duration-200 ${
         props.active
           ? "border-white/42 bg-[linear-gradient(180deg,rgba(255,255,255,0.18),rgba(255,255,255,0.08))] shadow-[0_14px_34px_rgba(9,18,34,0.2)]"
           : "border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.1),rgba(255,255,255,0.05))] hover:-translate-y-[1px] hover:border-white/24 hover:bg-[linear-gradient(180deg,rgba(255,255,255,0.14),rgba(255,255,255,0.07))]"
@@ -121,7 +121,7 @@ export function ItemCard(props: ItemCardProps) {
         </div>
       </div>
 
-      <div class="flex min-h-0 min-w-0 flex-col gap-3">
+      <div class="flex min-h-0 min-w-0 flex-col gap-2.5">
         <div class="min-w-0 max-w-full overflow-hidden rounded-[16px] border border-white/8 bg-black/12 px-3 py-2.5">
           <div class="mb-1 text-[9px] font-medium uppercase tracking-[0.16em] text-white/24">
             {targetLabel()}
@@ -135,9 +135,6 @@ export function ItemCard(props: ItemCardProps) {
 
         <Show when={notePreview()}>
           <div class="min-w-0 max-w-full overflow-hidden rounded-[16px] border border-white/8 bg-white/[0.04] px-3 py-2">
-            <div class="mb-1 text-[9px] font-medium uppercase tracking-[0.16em] text-white/24">
-              Note
-            </div>
             <div
               class="block min-w-0 max-w-full truncate text-[11px] leading-4 text-white/50"
             >
@@ -145,13 +142,6 @@ export function ItemCard(props: ItemCardProps) {
             </div>
           </div>
         </Show>
-      </div>
-
-      <div class="flex items-center justify-between">
-        <span class="rounded-full border border-white/8 bg-white/[0.04] px-2.5 py-1 text-[10px] text-white/34">
-          {props.active ? "Selected" : "Ready"}
-        </span>
-        <span class="text-[10px] text-white/22">Menu</span>
       </div>
     </button>
   );
