@@ -16,14 +16,15 @@
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-dialog": "^2",
     "@tauri-apps/plugin-opener": "^2",
+    "pinyin-pro": "^3.28.1",
     "solid-js": "^1.9.3"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.4",
+    "@tauri-apps/cli": "^2",
+    "tailwindcss": "^4.1.4",
     "typescript": "~5.6.2",
     "vite": "^6.0.3",
-    "vite-plugin-solid": "^2.11.0",
-    "@tauri-apps/cli": "^2",
-    "tailwindcss": "^4.1.4"
+    "vite-plugin-solid": "^2.11.0"
   }
 }

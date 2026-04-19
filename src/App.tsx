@@ -31,6 +31,7 @@ import { SearchBar } from "./components/SearchBar";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { copyText } from "./lib/clipboard";
 import { buildCommandPreview, requiresRuntimeTarget } from "./lib/command-preview";
+import { buildSearchIndexEntry, matchesSearch } from "./lib/search";
 import type {
   ConfigDirectoryInfo,
   Group,
@@ -110,13 +111,21 @@ function App() {
   let pendingHoverPreview: HoverPreviewState = null;
   let searchInput!: HTMLInputElement;
 
+  const searchIndex = createMemo(() =>
+    items().map((item) => ({
+      item,
+      search: buildSearchIndexEntry(item),
+    })),
+  );
+
   const visibleItems = createMemo(() => {
-    const term = query().trim().toLowerCase();
-    return items()
-      .filter((item) =>
+    const term = query().trim();
+    return searchIndex()
+      .filter(({ item }) =>
         currentGroupId() ? item.groupId === currentGroupId() : true,
       )
-      .filter((item) => item.name.toLowerCase().includes(term))
+      .filter(({ search }) => matchesSearch(search, term))
+      .map(({ item }) => item)
       .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
   });
 
