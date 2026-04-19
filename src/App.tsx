@@ -21,7 +21,6 @@ import {
   setWindowSize,
   updateItem,
 } from "./lib/commands";
-import { CommandRuntimeDialog } from "./components/CommandRuntimeDialog";
 import { GroupTabs } from "./components/GroupTabs";
 import { ItemEditorDialog } from "./components/ItemEditorDialog";
 import { ItemContextMenu } from "./components/ItemContextMenu";
@@ -30,7 +29,7 @@ import { LauncherShell } from "./components/LauncherShell";
 import { SearchBar } from "./components/SearchBar";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { copyText } from "./lib/clipboard";
-import { buildCommandPreview, requiresRuntimeTarget } from "./lib/command-preview";
+import { buildCommandPreview } from "./lib/command-preview";
 import { buildSearchIndexEntry, matchesSearch } from "./lib/search";
 import type {
   ConfigDirectoryInfo,
@@ -50,11 +49,6 @@ type ContextMenuState = {
   item: LaunchItem;
   x: number;
   y: number;
-} | null;
-
-type CommandRuntimeState = {
-  item: LaunchItem;
-  target: string;
 } | null;
 
 type HoverPreviewState = {
@@ -100,8 +94,6 @@ function App() {
   const [selectedItemId, setSelectedItemId] = createSignal<string | null>(null);
   const [editorState, setEditorState] = createSignal<EditorState>(null);
   const [contextMenu, setContextMenu] = createSignal<ContextMenuState>(null);
-  const [commandRuntimeState, setCommandRuntimeState] =
-    createSignal<CommandRuntimeState>(null);
   const [hoverPreview, setHoverPreview] = createSignal<HoverPreviewState>(null);
   const [settingsOpen, setSettingsOpen] = createSignal(false);
   const [dialogBusy, setDialogBusy] = createSignal(false);
@@ -245,10 +237,10 @@ function App() {
     }
   };
 
-  const performLaunch = async (item: LaunchItem, runtimeTarget?: string) => {
+  const performLaunch = async (item: LaunchItem) => {
     setContextMenu(null);
     setHoverPreview(null);
-    await launchItem(item.id, runtimeTarget);
+    await launchItem(item.id);
   };
 
   const clearHoverPreview = () => {
@@ -280,31 +272,7 @@ function App() {
 
   const handleLaunch = async (item: LaunchItem) => {
     setContextMenu(null);
-    if (requiresRuntimeTarget(item)) {
-      setCommandRuntimeState({
-        item,
-        target: "",
-      });
-      return;
-    }
-
     await performLaunch(item);
-  };
-
-  const submitRuntimeLaunch = async () => {
-    const state = commandRuntimeState();
-    if (!state) {
-      return;
-    }
-
-    const runtimeTarget = state.target.trim();
-    if (!runtimeTarget) {
-      notify("Please enter a runtime target");
-      return;
-    }
-
-    await performLaunch(state.item, runtimeTarget);
-    setCommandRuntimeState(null);
   };
 
   const handleDelete = async (item: LaunchItem) => {
@@ -363,7 +331,6 @@ function App() {
     setEditorState(null);
     setSettingsOpen(false);
     setContextMenu(null);
-    setCommandRuntimeState(null);
     clearHoverPreview();
     await currentWindow.hide();
   };
@@ -432,14 +399,6 @@ function App() {
     const handleKeyDown = async (event: KeyboardEvent) => {
       if (event.key === "Escape" || event.code === "Escape") {
         await handleEscape(event);
-        return;
-      }
-
-      if (commandRuntimeState()) {
-        if (event.key === "Enter") {
-          event.preventDefault();
-          await submitRuntimeLaunch();
-        }
         return;
       }
 
@@ -637,7 +596,7 @@ function App() {
               command: payload.command,
               note: payload.note,
               fixedArgs: payload.fixedArgs,
-              runtimeArgsTemplate: payload.runtimeArgsTemplate,
+              runtimeArgs: payload.runtimeArgs,
               workingDir: payload.workingDir,
               keepOpen: payload.keepOpen,
               groupId: payload.groupId,
@@ -652,7 +611,7 @@ function App() {
               command: payload.command,
               note: payload.note,
               fixedArgs: payload.fixedArgs,
-              runtimeArgsTemplate: payload.runtimeArgsTemplate,
+              runtimeArgs: payload.runtimeArgs,
               workingDir: payload.workingDir,
               keepOpen: payload.keepOpen,
               groupId: payload.groupId,
@@ -666,24 +625,6 @@ function App() {
           }
           setEditorState(null);
         }}
-      />
-
-      <CommandRuntimeDialog
-        open={commandRuntimeState() !== null}
-        item={commandRuntimeState()?.item ?? null}
-        value={commandRuntimeState()?.target ?? ""}
-        onInput={(value) =>
-          setCommandRuntimeState((current) =>
-            current
-              ? {
-                  ...current,
-                  target: value,
-                }
-              : null,
-          )
-        }
-        onClose={() => setCommandRuntimeState(null)}
-        onSubmit={submitRuntimeLaunch}
       />
 
       <SettingsPanel

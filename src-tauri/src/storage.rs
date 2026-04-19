@@ -210,7 +210,7 @@ impl StorageState {
             command,
             note: normalize_optional_text(payload.note),
             fixed_args: normalize_optional_text(payload.fixed_args),
-            runtime_args_template: normalize_optional_text(payload.runtime_args_template),
+            runtime_args: normalize_optional_text(payload.runtime_args),
             working_dir: payload
                 .working_dir
                 .and_then(|value| normalize_text(value)),
@@ -246,7 +246,7 @@ impl StorageState {
                 command: None,
                 note: None,
                 fixed_args: None,
-                runtime_args_template: None,
+                runtime_args: None,
                 working_dir: None,
                 keep_open: None,
                 group_id: None,
@@ -300,8 +300,8 @@ impl StorageState {
             item.fixed_args = fixed_args.and_then(normalize_text);
         }
 
-        if let Some(runtime_args_template) = payload.runtime_args_template {
-            item.runtime_args_template = runtime_args_template.and_then(normalize_text);
+        if let Some(runtime_args) = payload.runtime_args {
+            item.runtime_args = runtime_args.and_then(normalize_text);
         }
 
         if let Some(working_dir) = payload.working_dir {

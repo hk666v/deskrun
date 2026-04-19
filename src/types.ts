@@ -9,7 +9,7 @@ export interface LaunchItem {
   command: string | null;
   note: string | null;
   fixedArgs: string | null;
-  runtimeArgsTemplate: string | null;
+  runtimeArgs: string | null;
   workingDir: string | null;
   keepOpen: boolean;
   groupId: string | null;
@@ -63,7 +63,7 @@ export interface CreateItemPayload {
   command?: string;
   note?: string | null;
   fixedArgs?: string | null;
-  runtimeArgsTemplate?: string | null;
+  runtimeArgs?: string | null;
   workingDir?: string | null;
   keepOpen?: boolean;
   groupId?: string | null;
@@ -76,7 +76,7 @@ export interface UpdateItemPayload {
   command?: string;
   note?: string | null;
   fixedArgs?: string | null;
-  runtimeArgsTemplate?: string | null;
+  runtimeArgs?: string | null;
   workingDir?: string | null;
   keepOpen?: boolean;
   groupId?: string | null;

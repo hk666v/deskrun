@@ -1,9 +1,6 @@
 import type { LaunchItem } from "../types";
 
-export function buildCommandPreview(
-  item: LaunchItem,
-  runtimeTarget = "{target}",
-) {
+export function buildCommandPreview(item: LaunchItem) {
   if (item.kind !== "command") {
     return item.target;
   }
@@ -14,23 +11,11 @@ export function buildCommandPreview(
     segments.push(item.fixedArgs.trim());
   }
 
-  if (item.runtimeArgsTemplate?.trim()) {
-    const template = item.runtimeArgsTemplate.trim();
-    segments.push(
-      template.includes("{target}")
-        ? template.replaceAll("{target}", runtimeTarget)
-        : template,
-    );
+  if (item.runtimeArgs?.trim()) {
+    segments.push(item.runtimeArgs.trim());
   }
 
   const payload = segments.filter((value) => value.trim().length > 0).join(" ");
   const mode = item.keepOpen ? "/K" : "/C";
   return `cmd.exe ${mode} ${payload}`.trim();
-}
-
-export function requiresRuntimeTarget(item: LaunchItem) {
-  return (
-    item.kind === "command" &&
-    (item.runtimeArgsTemplate?.includes("{target}") ?? false)
-  );
 }

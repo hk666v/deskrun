@@ -4,15 +4,14 @@ use anyhow::{anyhow, Result};
 
 use crate::models::{LaunchItem, LaunchItemKind};
 
-pub fn launch(item: &LaunchItem, runtime_target: Option<&str>) -> Result<()> {
+pub fn launch(item: &LaunchItem) -> Result<()> {
     match item.kind {
         LaunchItemKind::Exe => launch_executable(&item.target),
         LaunchItemKind::Link | LaunchItemKind::Folder | LaunchItemKind::Url => shell_open(&item.target),
         LaunchItemKind::Command => launch_command(
             item.command.as_deref().unwrap_or(&item.target),
             item.fixed_args.as_deref(),
-            item.runtime_args_template.as_deref(),
-            runtime_target,
+            item.runtime_args.as_deref(),
             item.working_dir.as_deref(),
             item.keep_open,
         ),
@@ -41,12 +40,11 @@ fn shell_open(target: &str) -> Result<()> {
 fn launch_command(
     command: &str,
     fixed_args: Option<&str>,
-    runtime_args_template: Option<&str>,
-    runtime_target: Option<&str>,
+    runtime_args: Option<&str>,
     working_dir: Option<&str>,
     keep_open: bool,
 ) -> Result<()> {
-    let final_command = compose_command(command, fixed_args, runtime_args_template, runtime_target)?;
+    let final_command = compose_command(command, fixed_args, runtime_args)?;
     if final_command.is_empty() {
         return Err(anyhow!("command cannot be empty"));
     }
@@ -67,8 +65,7 @@ fn launch_command(
 fn compose_command(
     command: &str,
     fixed_args: Option<&str>,
-    runtime_args_template: Option<&str>,
-    runtime_target: Option<&str>,
+    runtime_args: Option<&str>,
 ) -> Result<String> {
     let trimmed_command = command.trim();
     if trimmed_command.is_empty() {
@@ -81,20 +78,8 @@ fn compose_command(
         segments.push(fixed_args.to_string());
     }
 
-    if let Some(template) = runtime_args_template.map(str::trim).filter(|value| !value.is_empty()) {
-        let rendered = if template.contains("{target}") {
-            let target = runtime_target
-                .map(str::trim)
-                .filter(|value| !value.is_empty())
-                .ok_or_else(|| anyhow!("runtime target is required"))?;
-            template.replace("{target}", target)
-        } else {
-            template.to_string()
-        };
-
-        if !rendered.trim().is_empty() {
-            segments.push(rendered.trim().to_string());
-        }
+    if let Some(runtime_args) = runtime_args.map(str::trim).filter(|value| !value.is_empty()) {
+        segments.push(runtime_args.to_string());
     }
 
     Ok(segments.join(" "))

@@ -27,7 +27,8 @@ pub struct LaunchItem {
     pub command: Option<String>,
     pub note: Option<String>,
     pub fixed_args: Option<String>,
-    pub runtime_args_template: Option<String>,
+    #[serde(alias = "runtimeArgsTemplate")]
+    pub runtime_args: Option<String>,
     pub working_dir: Option<String>,
     #[serde(default)]
     pub keep_open: bool,
@@ -113,7 +114,7 @@ pub struct CreateItemPayload {
     pub command: Option<String>,
     pub note: Option<String>,
     pub fixed_args: Option<String>,
-    pub runtime_args_template: Option<String>,
+    pub runtime_args: Option<String>,
     pub working_dir: Option<String>,
     pub keep_open: Option<bool>,
     pub group_id: Option<String>,
@@ -128,7 +129,7 @@ pub struct UpdateItemPayload {
     pub command: Option<String>,
     pub note: Option<Option<String>>,
     pub fixed_args: Option<Option<String>>,
-    pub runtime_args_template: Option<Option<String>>,
+    pub runtime_args: Option<Option<String>>,
     pub working_dir: Option<Option<String>>,
     pub keep_open: Option<bool>,
     pub group_id: Option<Option<String>>,

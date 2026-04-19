@@ -16,7 +16,7 @@ interface ItemEditorDialogProps {
     command?: string;
     note?: string | null;
     fixedArgs?: string | null;
-    runtimeArgsTemplate?: string | null;
+    runtimeArgs?: string | null;
     workingDir?: string | null;
     keepOpen?: boolean;
     groupId: string | null;
@@ -30,7 +30,7 @@ export function ItemEditorDialog(props: ItemEditorDialogProps) {
   const [target, setTarget] = createSignal("");
   const [note, setNote] = createSignal("");
   const [fixedArgs, setFixedArgs] = createSignal("");
-  const [runtimeArgsTemplate, setRuntimeArgsTemplate] = createSignal("");
+  const [runtimeArgs, setRuntimeArgs] = createSignal("");
   const [workingDir, setWorkingDir] = createSignal("");
   const [keepOpen, setKeepOpen] = createSignal(false);
   const [groupId, setGroupId] = createSignal<string | null>(null);
@@ -57,7 +57,7 @@ export function ItemEditorDialog(props: ItemEditorDialogProps) {
     );
     setNote(item?.note ?? "");
     setFixedArgs(item?.fixedArgs ?? "");
-    setRuntimeArgsTemplate(item?.runtimeArgsTemplate ?? "");
+    setRuntimeArgs(item?.runtimeArgs ?? "");
     setWorkingDir(item?.workingDir ?? "");
     setKeepOpen(item?.keepOpen ?? false);
     setGroupId(item?.groupId ?? null);
@@ -172,17 +172,15 @@ export function ItemEditorDialog(props: ItemEditorDialogProps) {
                   />
                 </Field>
 
-                <Field label="Runtime Template">
+                <Field label="Runtime Args">
                   <input
-                    value={runtimeArgsTemplate()}
-                    onInput={(event) =>
-                      setRuntimeArgsTemplate(event.currentTarget.value)
-                    }
+                    value={runtimeArgs()}
+                    onInput={(event) => setRuntimeArgs(event.currentTarget.value)}
                     class="field-input"
-                    placeholder="-u {target}"
+                    placeholder="-u https://example.com -proxy http://127.0.0.1:8080"
                   />
                   <p class="text-xs text-white/42">
-                    Use <code>{`{target}`}</code> to ask for one runtime value before launch.
+                    Saved runtime arguments are appended after the fixed args when this item launches.
                   </p>
                 </Field>
 
@@ -290,8 +288,7 @@ export function ItemEditorDialog(props: ItemEditorDialogProps) {
                     command: isCommandMode() ? target().trim() : undefined,
                     note: note().trim() || null,
                     fixedArgs: isCommandMode() ? fixedArgs().trim() || null : undefined,
-                    runtimeArgsTemplate:
-                      isCommandMode() ? runtimeArgsTemplate().trim() || null : undefined,
+                    runtimeArgs: isCommandMode() ? runtimeArgs().trim() || null : undefined,
                     workingDir: isCommandMode() ? workingDir().trim() || null : undefined,
                     keepOpen: isCommandMode() ? keepOpen() : undefined,
                     groupId: groupId(),

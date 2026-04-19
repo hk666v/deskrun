@@ -21,7 +21,7 @@ The current version focuses on a clean desktop experience, stable launching, and
 - Window size settings with saved size restore
 - CMD items with:
   - fixed arguments
-  - runtime argument templates like `{target}`
+  - saved runtime arguments
   - full command preview
   - `Copy Command` from the context menu
 
@@ -116,9 +116,9 @@ Example:
 
 - Command: `httpx`
 - Fixed Args: `-silent -threads 50`
-- Runtime Template: `-u {target}`
+- Runtime Args: `-u https://example.com`
 
-At launch time, DeskRun will ask for the runtime value and produce a command like:
+DeskRun stores the full command arguments ahead of time and launches them directly:
 
 ```cmd
 cmd.exe /C httpx -silent -threads 50 -u https://example.com
@@ -185,7 +185,7 @@ public/      static assets
 Potential next steps:
 
 - Better search and matching
-- More command templates and parameter presets
+- Better command presets and parameter workflows
 - Import/export
 - Better icon customization
 - App discovery
