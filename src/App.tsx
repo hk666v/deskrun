@@ -37,7 +37,11 @@ import { SearchBar } from "./components/SearchBar";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { copyText } from "./lib/clipboard";
 import { buildCommandPreview } from "./lib/command-preview";
-import { buildSearchIndexEntry, matchesSearch } from "./lib/search";
+import {
+  buildSearchIndexEntry,
+  calculateSearchScore,
+  matchesSearch,
+} from "./lib/search";
 import type {
   ConfigDirectoryInfo,
   DiscoveryCandidate,
@@ -138,11 +142,28 @@ function App() {
     })),
   );
 
+  const defaultItemSort = (left: LaunchItem, right: LaunchItem, view: string | null) => {
+    if (view === RECENT_VIEW_ID) {
+      return (
+        (right.lastLaunchedAt ?? "").localeCompare(left.lastLaunchedAt ?? "") ||
+        right.launchCount - left.launchCount ||
+        left.name.localeCompare(right.name)
+      );
+    }
+    if (view === FAVORITES_VIEW_ID) {
+      return (
+        (right.lastLaunchedAt ?? "").localeCompare(left.lastLaunchedAt ?? "") ||
+        left.name.localeCompare(right.name)
+      );
+    }
+    return left.sortOrder - right.sortOrder || left.name.localeCompare(right.name);
+  };
+
   const visibleItems = createMemo(() => {
     const term = query().trim();
+    const view = currentGroupId();
     return searchIndex()
       .filter(({ item }) => {
-        const view = currentGroupId();
         if (view === FAVORITES_VIEW_ID) {
           return item.isFavorite;
         }
@@ -154,25 +175,22 @@ function App() {
         }
         return view ? item.groupId === view : true;
       })
-      .filter(({ search }) => matchesSearch(search, term))
-      .map(({ item }) => item)
-      .sort((a, b) => {
-        const view = currentGroupId();
-        if (view === RECENT_VIEW_ID) {
+      .map(({ item, search }) => ({
+        item,
+        score: term ? calculateSearchScore(search, item, term) : 0,
+        matches: matchesSearch(search, term),
+      }))
+      .filter(({ matches }) => matches)
+      .sort((left, right) => {
+        if (term) {
           return (
-            (b.lastLaunchedAt ?? "").localeCompare(a.lastLaunchedAt ?? "") ||
-            b.launchCount - a.launchCount ||
-            a.name.localeCompare(b.name)
+            right.score - left.score ||
+            defaultItemSort(left.item, right.item, view)
           );
         }
-        if (view === FAVORITES_VIEW_ID) {
-          return (
-            (b.lastLaunchedAt ?? "").localeCompare(a.lastLaunchedAt ?? "") ||
-            a.name.localeCompare(b.name)
-          );
-        }
-        return a.sortOrder - b.sortOrder || a.name.localeCompare(b.name);
-      });
+        return defaultItemSort(left.item, right.item, view);
+      })
+      .map(({ item }) => item);
   });
 
   const syncSelection = (nextItems: LaunchItem[]) => {
