@@ -16,6 +16,7 @@ interface SettingsPanelProps {
   onSetHotkey: (value: string) => void;
   onToggleStartup: (value: boolean) => void;
   onToggleCloseOnLaunch: (value: boolean) => void;
+  onSetDisplayMode: (value: "grid" | "list") => void;
   onSetWindowSize: (width: number, height: number) => void;
   onChooseConfigDirectory: () => void;
   onOpenConfigDirectory: () => void;
@@ -94,6 +95,31 @@ export function SettingsPanel(props: SettingsPanelProps) {
                 checked={props.settings.closeOnLaunch}
                 onChange={props.onToggleCloseOnLaunch}
               />
+
+              <div class="rounded-[18px] border border-white/10 bg-black/10 px-4 py-4">
+                <div class="flex items-center justify-between gap-3">
+                  <div>
+                    <p class="text-sm text-white/75">Display mode</p>
+                    <p class="mt-1 text-xs text-white/42">
+                      Choose between the current card grid and a denser list layout.
+                    </p>
+                  </div>
+                  <div class="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] p-1">
+                    <DisplayModeButton
+                      active={props.settings.displayMode === "grid"}
+                      onClick={() => props.onSetDisplayMode("grid")}
+                    >
+                      Grid
+                    </DisplayModeButton>
+                    <DisplayModeButton
+                      active={props.settings.displayMode === "list"}
+                      onClick={() => props.onSetDisplayMode("list")}
+                    >
+                      List
+                    </DisplayModeButton>
+                  </div>
+                </div>
+              </div>
 
               <div class="rounded-[18px] border border-white/10 bg-black/10 px-4 py-4">
                 <div class="flex items-center justify-between gap-3">
@@ -389,5 +415,27 @@ function ToggleRow(props: ToggleRowProps) {
         class="h-4 w-4 accent-white"
       />
     </label>
+  );
+}
+
+interface DisplayModeButtonProps {
+  active: boolean;
+  children: string;
+  onClick: () => void;
+}
+
+function DisplayModeButton(props: DisplayModeButtonProps) {
+  return (
+    <button
+      type="button"
+      onClick={props.onClick}
+      class={`rounded-full px-3 py-2 text-xs font-semibold transition ${
+        props.active
+          ? "bg-white text-slate-900 shadow-[0_6px_18px_rgba(255,255,255,0.12)]"
+          : "text-white/62 hover:bg-white/[0.07] hover:text-white/82"
+      }`}
+    >
+      {props.children}
+    </button>
   );
 }

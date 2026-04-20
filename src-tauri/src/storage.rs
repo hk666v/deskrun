@@ -218,6 +218,16 @@ impl StorageState {
         self.persist_settings()
     }
 
+    pub fn set_display_mode(&mut self, display_mode: String) -> Result<()> {
+        let normalized = display_mode.trim().to_ascii_lowercase();
+        if normalized != "grid" && normalized != "list" {
+            return Err(anyhow!("display mode must be either grid or list"));
+        }
+
+        self.settings.display_mode = normalized;
+        self.persist_settings()
+    }
+
     pub fn set_window_size(
         &mut self,
         width: u32,
@@ -517,6 +527,10 @@ impl StorageState {
     }
 
     fn normalize(&mut self) {
+        if self.settings.display_mode != "grid" && self.settings.display_mode != "list" {
+            self.settings.display_mode = "grid".to_string();
+        }
+
         self.items_data.groups.sort_by_key(|group| group.sort_order);
         for (index, group) in self.items_data.groups.iter_mut().enumerate() {
             group.sort_order = index as i32;

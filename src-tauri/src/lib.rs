@@ -86,6 +86,7 @@ pub fn run() {
             commands::set_hotkey,
             commands::set_launch_on_startup,
             commands::set_close_on_launch,
+            commands::set_display_mode,
             commands::set_window_size,
             commands::sync_window_size,
             commands::set_config_directory,

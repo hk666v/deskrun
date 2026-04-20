@@ -67,6 +67,10 @@ export function setCloseOnLaunch(closeOnLaunch: boolean) {
   return invoke<BootstrapData>("set_close_on_launch", { closeOnLaunch });
 }
 
+export function setDisplayMode(displayMode: "grid" | "list") {
+  return invoke<BootstrapData>("set_display_mode", { displayMode });
+}
+
 export function setWindowSize(width: number, height: number) {
   return invoke<BootstrapData>("set_window_size", { width, height });
 }

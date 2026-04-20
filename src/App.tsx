@@ -17,6 +17,7 @@ import {
   reorderItems,
   setConfigDirectory,
   setCloseOnLaunch,
+  setDisplayMode,
   setHotkey,
   setLaunchOnStartup,
   syncWindowSize,
@@ -65,6 +66,7 @@ const DEFAULT_SETTINGS: Settings = {
   launchOnStartup: false,
   closeOnLaunch: true,
   themeMode: "system",
+  displayMode: "grid",
   windowWidth: 760,
   windowHeight: 560,
 };
@@ -381,6 +383,14 @@ function App() {
     setSelectedItemId(collection[nextIndex].id);
   };
 
+  const selectionStep = (direction: "horizontal" | "vertical", delta: number) => {
+    if (settings().displayMode === "list") {
+      return direction === "vertical" ? delta : 0;
+    }
+
+    return direction === "vertical" ? delta * 4 : delta;
+  };
+
   const hideLauncher = async () => {
     setEditorState(null);
     setSettingsOpen(false);
@@ -458,16 +468,16 @@ function App() {
 
       if (event.key === "ArrowRight") {
         event.preventDefault();
-        moveSelection(1);
+        moveSelection(selectionStep("horizontal", 1));
       } else if (event.key === "ArrowLeft") {
         event.preventDefault();
-        moveSelection(-1);
+        moveSelection(selectionStep("horizontal", -1));
       } else if (event.key === "ArrowDown") {
         event.preventDefault();
-        moveSelection(4);
+        moveSelection(selectionStep("vertical", 1));
       } else if (event.key === "ArrowUp") {
         event.preventDefault();
-        moveSelection(-4);
+        moveSelection(selectionStep("vertical", -1));
       } else if (event.key === "Enter") {
         const item = visibleItems().find((entry) => entry.id === selectedItemId());
         if (item) {
@@ -545,6 +555,7 @@ function App() {
 
         <ItemGrid
           items={visibleItems()}
+          viewMode={settings().displayMode}
           activeItemId={selectedItemId()}
           sortable={
             !query() &&
@@ -712,6 +723,12 @@ function App() {
           setSettings(data.settings);
           setWindowSizeLimits(data.windowSizeLimits);
           notify(value ? "Hide after launch enabled" : "Hide after launch disabled");
+        }}
+        onSetDisplayMode={async (value) => {
+          const data = await setDisplayMode(value);
+          setSettings(data.settings);
+          setWindowSizeLimits(data.windowSizeLimits);
+          notify(value === "list" ? "List view enabled" : "Grid view enabled");
         }}
         onSetWindowSize={async (width, height) => {
           const data = await setWindowSize(width, height);

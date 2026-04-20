@@ -4,6 +4,7 @@ import { ItemCard } from "./ItemCard";
 
 interface ItemGridProps {
   items: LaunchItem[];
+  viewMode: "grid" | "list";
   activeItemId: string | null;
   sortable: boolean;
   onLaunch: (item: LaunchItem) => void;
@@ -18,7 +19,7 @@ export function ItemGrid(props: ItemGridProps) {
   let draggedId: string | null = null;
 
   return (
-    <div class="relative min-h-[312px] flex-1 overflow-hidden rounded-[30px] border border-white/16 bg-[linear-gradient(180deg,rgba(255,255,255,0.18),rgba(255,255,255,0.08))] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]">
+    <div class="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-[30px] border border-white/16 bg-[linear-gradient(180deg,rgba(255,255,255,0.18),rgba(255,255,255,0.08))] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]">
       <Show
         when={props.items.length > 0}
         fallback={
@@ -32,15 +33,24 @@ export function ItemGrid(props: ItemGridProps) {
         }
       >
         <div
-          class="grid content-start items-stretch gap-4 overflow-y-auto pr-2"
-          style={{
-            "grid-template-columns": "repeat(auto-fill, minmax(208px, 1fr))",
-          }}
+          class={
+            props.viewMode === "list"
+              ? "flex min-h-0 flex-1 flex-col items-stretch gap-3 overflow-y-auto overscroll-contain pr-2"
+              : "grid min-h-0 flex-1 content-start items-stretch gap-4 overflow-y-auto overscroll-contain pr-2"
+          }
+          style={
+            props.viewMode === "grid"
+              ? {
+                  "grid-template-columns": "repeat(auto-fill, minmax(208px, 1fr))",
+                }
+              : undefined
+          }
         >
           <For each={props.items}>
             {(item) => (
               <ItemCard
                 item={item}
+                layout={props.viewMode}
                 active={item.id === props.activeItemId}
                 draggable={props.sortable}
                 onSelect={() => props.onSelect(item)}

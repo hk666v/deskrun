@@ -34,6 +34,7 @@ export interface Settings {
   launchOnStartup: boolean;
   closeOnLaunch: boolean;
   themeMode: "system";
+  displayMode: "grid" | "list";
   windowWidth: number;
   windowHeight: number;
   windowX?: number | null;

@@ -177,6 +177,19 @@ pub fn set_close_on_launch(
 }
 
 #[tauri::command]
+pub fn set_display_mode(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+    display_mode: String,
+) -> Result<BootstrapData, String> {
+    let mut storage = state.lock()?;
+    storage
+        .set_display_mode(display_mode)
+        .map_err(|error| error.to_string())?;
+    bootstrap_data(&app, &storage)
+}
+
+#[tauri::command]
 pub fn set_window_size(
     app: AppHandle,
     state: State<'_, SharedState>,
