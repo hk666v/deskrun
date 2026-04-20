@@ -3,9 +3,13 @@ use tauri_plugin_autostart::ManagerExt as AutostartExt;
 
 use crate::{
     app_state::SharedState,
+    discovery,
     hotkey,
     launcher,
-    models::{BootstrapData, CreateItemPayload, Group, LaunchItem, UpdateItemPayload},
+    models::{
+        BootstrapData, CreateItemPayload, DiscoveryCandidate, DiscoveryCandidateImport,
+        DiscoveryScanOptions, Group, LaunchItem, UpdateItemPayload,
+    },
 };
 
 #[tauri::command]
@@ -97,6 +101,26 @@ pub fn import_paths(
 ) -> Result<Vec<LaunchItem>, String> {
     let mut storage = state.lock()?;
     storage.import_paths(paths).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn scan_discovery_candidates(
+    state: State<'_, SharedState>,
+    options: DiscoveryScanOptions,
+) -> Result<Vec<DiscoveryCandidate>, String> {
+    let storage = state.lock()?;
+    discovery::scan(&storage, &options).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn import_discovery_candidates(
+    state: State<'_, SharedState>,
+    candidates: Vec<DiscoveryCandidateImport>,
+) -> Result<Vec<LaunchItem>, String> {
+    let mut storage = state.lock()?;
+    storage
+        .import_discovery_candidates(candidates)
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]

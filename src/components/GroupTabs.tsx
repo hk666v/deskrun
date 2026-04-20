@@ -4,6 +4,7 @@ import type { Group } from "../types";
 interface GroupTabsProps {
   groups: Group[];
   currentGroupId: string | null;
+  discoveryCount: number;
   onSelect: (groupId: string | null) => void;
 }
 
@@ -25,7 +26,7 @@ export function GroupTabs(props: GroupTabsProps) {
                 : "border-transparent bg-white/[0.04] text-white/52 hover:bg-white/[0.08] hover:text-white/82"
             }`}
           >
-            All
+            My Library
           </button>
           <button
             type="button"
@@ -48,6 +49,17 @@ export function GroupTabs(props: GroupTabsProps) {
             }`}
           >
             Recent
+          </button>
+          <button
+            type="button"
+            onClick={() => props.onSelect("__discovery__")}
+            class={`max-w-[180px] shrink-0 truncate rounded-full border px-3.5 py-1.5 text-[13px] font-medium transition ${
+              props.currentGroupId === "__discovery__"
+                ? "border-white/24 bg-white text-slate-900 shadow-[0_8px_18px_rgba(15,23,42,0.16)]"
+                : "border-transparent bg-white/[0.04] text-white/52 hover:bg-white/[0.08] hover:text-white/82"
+            }`}
+          >
+            {props.discoveryCount > 0 ? `Discovery (${props.discoveryCount})` : "Discovery"}
           </button>
           <For each={props.groups}>
             {(group) => (

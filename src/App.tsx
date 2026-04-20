@@ -10,11 +10,13 @@ import {
   exportConfig,
   getBootstrapData,
   importConfig,
+  importDiscoveryCandidates,
   importPaths,
   launchItem,
   openConfigDirectory,
   renameGroup,
   reorderItems,
+  scanDiscoveryCandidates,
   setConfigDirectory,
   setCloseOnLaunch,
   setDisplayMode,
@@ -26,6 +28,7 @@ import {
   updateItem,
 } from "./lib/commands";
 import { GroupTabs } from "./components/GroupTabs";
+import { DiscoveryPanel } from "./components/DiscoveryPanel";
 import { ItemEditorDialog } from "./components/ItemEditorDialog";
 import { ItemContextMenu } from "./components/ItemContextMenu";
 import { ItemGrid } from "./components/ItemGrid";
@@ -37,6 +40,8 @@ import { buildCommandPreview } from "./lib/command-preview";
 import { buildSearchIndexEntry, matchesSearch } from "./lib/search";
 import type {
   ConfigDirectoryInfo,
+  DiscoveryCandidate,
+  DiscoveryScanOptions,
   Group,
   LaunchItem,
   Settings,
@@ -86,6 +91,12 @@ const DEFAULT_CONFIG_DIRECTORY: ConfigDirectoryInfo = {
 
 const FAVORITES_VIEW_ID = "__favorites__";
 const RECENT_VIEW_ID = "__recent__";
+const DISCOVERY_VIEW_ID = "__discovery__";
+const DEFAULT_DISCOVERY_SCAN_OPTIONS: DiscoveryScanOptions = {
+  startMenu: true,
+  desktop: true,
+  registry: true,
+};
 
 function App() {
   const currentWindow = getCurrentWindow();
@@ -107,6 +118,15 @@ function App() {
   const [dialogBusy, setDialogBusy] = createSignal(false);
   const [draggingExternal, setDraggingExternal] = createSignal(false);
   const [feedback, setFeedback] = createSignal("");
+  const [discoveryBusy, setDiscoveryBusy] = createSignal(false);
+  const [discoveryError, setDiscoveryError] = createSignal("");
+  const [discoveryCandidates, setDiscoveryCandidates] = createSignal<DiscoveryCandidate[]>([]);
+  const [selectedDiscoveryIds, setSelectedDiscoveryIds] = createSignal<string[]>([]);
+  const [hideExistingDiscovery, setHideExistingDiscovery] = createSignal(true);
+  const [discoveryQuery, setDiscoveryQuery] = createSignal("");
+  const [discoveryScanOptions, setDiscoveryScanOptions] = createSignal<DiscoveryScanOptions>(
+    DEFAULT_DISCOVERY_SCAN_OPTIONS,
+  );
   let hoverPreviewTimer: number | undefined;
   let pendingHoverPreview: HoverPreviewState = null;
   let searchInput!: HTMLInputElement;
@@ -128,6 +148,9 @@ function App() {
         }
         if (view === RECENT_VIEW_ID) {
           return item.lastLaunchedAt !== null;
+        }
+        if (view === DISCOVERY_VIEW_ID) {
+          return false;
         }
         return view ? item.groupId === view : true;
       })
@@ -153,6 +176,11 @@ function App() {
   });
 
   const syncSelection = (nextItems: LaunchItem[]) => {
+    if (currentGroupId() === DISCOVERY_VIEW_ID) {
+      setSelectedItemId(null);
+      return;
+    }
+
     if (nextItems.length === 0) {
       setSelectedItemId(null);
       return;
@@ -222,6 +250,81 @@ function App() {
     (notify as unknown as { timer?: number }).timer = window.setTimeout(() => {
       setFeedback("");
     }, 2200);
+  };
+
+  const runDiscoveryScan = async () => {
+    setDiscoveryBusy(true);
+    setDiscoveryError("");
+    try {
+      const candidates = await scanDiscoveryCandidates(discoveryScanOptions());
+      setDiscoveryCandidates(candidates);
+      setSelectedDiscoveryIds(
+        candidates
+          .filter((candidate) => !candidate.alreadyExists)
+          .map((candidate) => candidate.id),
+      );
+      if (currentGroupId() !== DISCOVERY_VIEW_ID) {
+        setCurrentGroupId(DISCOVERY_VIEW_ID);
+      }
+      notify(`Discovered ${candidates.length} app candidate(s)`);
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : "Unable to scan apps right now.";
+      setDiscoveryError(message);
+      notify(message);
+    } finally {
+      setDiscoveryBusy(false);
+    }
+  };
+
+  const importDiscoveryPayload = async (
+    payload: Array<Pick<DiscoveryCandidate, "name" | "kind" | "target">>,
+    importedIds?: string[],
+  ) => {
+    setDiscoveryBusy(true);
+    setDiscoveryError("");
+    try {
+      const created = await importDiscoveryCandidates(payload);
+      if (created.length > 0) {
+        setItems((current) => [...current, ...created]);
+        if (importedIds && importedIds.length > 0) {
+          const selected = new Set(importedIds);
+          setDiscoveryCandidates((current) =>
+            current.map((candidate) =>
+              selected.has(candidate.id) ? { ...candidate, alreadyExists: true } : candidate,
+            ),
+          );
+        }
+        notify(`Imported ${created.length} discovered app(s)`);
+      } else {
+        notify("No new discovered apps were imported");
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message
+          ? error.message
+          : "Unable to import selected apps.";
+      setDiscoveryError(message);
+      notify(message);
+    } finally {
+      setDiscoveryBusy(false);
+    }
+  };
+
+  const importSelectedDiscoveryItems = async () => {
+    const selected = new Set(selectedDiscoveryIds());
+    const payload = discoveryCandidates()
+      .filter((candidate) => selected.has(candidate.id) && !candidate.alreadyExists)
+      .map(({ name, kind, target }) => ({ name, kind, target }));
+
+    if (payload.length === 0) {
+      notify("No new discovered apps were selected");
+      return;
+    }
+
+    await importDiscoveryPayload(payload, [...selected]);
   };
 
   const importSelectedPaths = async (paths: string[]) => {
@@ -366,6 +469,10 @@ function App() {
   };
 
   const moveSelection = (delta: number) => {
+    if (currentGroupId() === DISCOVERY_VIEW_ID) {
+      return;
+    }
+
     const collection = visibleItems();
     if (collection.length === 0) {
       return;
@@ -550,29 +657,80 @@ function App() {
         <GroupTabs
           groups={groups()}
           currentGroupId={currentGroupId()}
+          discoveryCount={discoveryCandidates().filter((candidate) => !candidate.alreadyExists).length}
           onSelect={setCurrentGroupId}
         />
 
-        <ItemGrid
-          items={visibleItems()}
-          viewMode={settings().displayMode}
-          activeItemId={selectedItemId()}
-          sortable={
-            !query() &&
-            currentGroupId() !== FAVORITES_VIEW_ID &&
-            currentGroupId() !== RECENT_VIEW_ID
+        <Show
+          when={currentGroupId() === DISCOVERY_VIEW_ID}
+          fallback={
+            <ItemGrid
+              items={visibleItems()}
+              viewMode={settings().displayMode}
+              activeItemId={selectedItemId()}
+              sortable={
+                !query() &&
+                currentGroupId() !== FAVORITES_VIEW_ID &&
+                currentGroupId() !== RECENT_VIEW_ID
+              }
+              onSelect={(item) => setSelectedItemId(item.id)}
+              onPreviewHover={scheduleHoverPreview}
+              onPreviewLeave={clearHoverPreview}
+              onLaunch={handleLaunch}
+              onContextMenu={(item, x, y) => {
+                setSelectedItemId(item.id);
+                clearHoverPreview();
+                setContextMenu({ item, x, y });
+              }}
+              onReorder={handleReorder}
+            />
           }
-          onSelect={(item) => setSelectedItemId(item.id)}
-          onPreviewHover={scheduleHoverPreview}
-          onPreviewLeave={clearHoverPreview}
-          onLaunch={handleLaunch}
-          onContextMenu={(item, x, y) => {
-            setSelectedItemId(item.id);
-            clearHoverPreview();
-            setContextMenu({ item, x, y });
-          }}
-          onReorder={handleReorder}
-        />
+        >
+          <DiscoveryPanel
+            busy={discoveryBusy()}
+            error={discoveryError()}
+            candidates={discoveryCandidates()}
+            selectedIds={selectedDiscoveryIds()}
+            searchQuery={discoveryQuery()}
+            hideExisting={hideExistingDiscovery()}
+            scanOptions={discoveryScanOptions()}
+            onSearchQueryChange={setDiscoveryQuery}
+            onSetHideExisting={setHideExistingDiscovery}
+            onSetScanOptions={setDiscoveryScanOptions}
+            onToggleAllVisible={(candidateIds, checked) => {
+              setSelectedDiscoveryIds((current) => {
+                if (checked) {
+                  return [...new Set([...current, ...candidateIds])];
+                }
+                const hidden = new Set(candidateIds);
+                return current.filter((id) => !hidden.has(id));
+              });
+            }}
+            onToggleSelected={(candidateId, checked) => {
+              setSelectedDiscoveryIds((current) =>
+                checked
+                  ? current.includes(candidateId)
+                    ? current
+                    : [...current, candidateId]
+                  : current.filter((id) => id !== candidateId),
+              );
+            }}
+            onImportOne={async (candidate) => {
+              const matched = discoveryCandidates().find(
+                (entry) =>
+                  entry.target === candidate.target &&
+                  entry.kind === candidate.kind &&
+                  entry.name === candidate.name,
+              );
+              await importDiscoveryPayload(
+                [candidate],
+                matched ? [matched.id] : undefined,
+              );
+            }}
+            onScan={runDiscoveryScan}
+            onImportSelected={importSelectedDiscoveryItems}
+          />
+        </Show>
       </div>
 
       <Show when={hoverPreviewDisplay()}>

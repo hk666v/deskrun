@@ -1,5 +1,6 @@
 mod app_state;
 mod commands;
+mod discovery;
 mod hotkey;
 mod icons;
 mod launcher;
@@ -83,6 +84,8 @@ pub fn run() {
             commands::launch_item,
             commands::toggle_favorite,
             commands::import_paths,
+            commands::scan_discovery_candidates,
+            commands::import_discovery_candidates,
             commands::set_hotkey,
             commands::set_launch_on_startup,
             commands::set_close_on_launch,

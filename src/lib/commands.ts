@@ -2,6 +2,8 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   BootstrapData,
   CreateItemPayload,
+  DiscoveryCandidate,
+  DiscoveryScanOptions,
   Group,
   LaunchItem,
   UpdateItemPayload,
@@ -53,6 +55,14 @@ export function toggleFavorite(itemId: string, favorite: boolean) {
 
 export function importPaths(paths: string[]) {
   return invoke<LaunchItem[]>("import_paths", { paths });
+}
+
+export function scanDiscoveryCandidates(options: DiscoveryScanOptions) {
+  return invoke<DiscoveryCandidate[]>("scan_discovery_candidates", { options });
+}
+
+export function importDiscoveryCandidates(candidates: Array<Pick<DiscoveryCandidate, "name" | "kind" | "target">>) {
+  return invoke<LaunchItem[]>("import_discovery_candidates", { candidates });
 }
 
 export function setHotkey(hotkey: string) {

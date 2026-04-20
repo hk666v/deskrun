@@ -150,6 +150,44 @@ pub struct UpdateItemPayload {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct DiscoveryScanOptions {
+    pub start_menu: bool,
+    pub desktop: bool,
+    pub registry: bool,
+}
+
+impl Default for DiscoveryScanOptions {
+    fn default() -> Self {
+        Self {
+            start_menu: true,
+            desktop: true,
+            registry: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscoveryCandidate {
+    pub id: String,
+    pub name: String,
+    pub kind: LaunchItemKind,
+    pub target: String,
+    pub source: String,
+    pub confidence: String,
+    pub already_exists: bool,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscoveryCandidateImport {
+    pub name: String,
+    pub kind: LaunchItemKind,
+    pub target: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PersistedItems {
     pub items: Vec<LaunchItem>,

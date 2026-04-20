@@ -54,6 +54,22 @@ export interface ConfigDirectoryInfo {
   usingCustomPath: boolean;
 }
 
+export interface DiscoveryScanOptions {
+  startMenu: boolean;
+  desktop: boolean;
+  registry: boolean;
+}
+
+export interface DiscoveryCandidate {
+  id: string;
+  name: string;
+  kind: "exe" | "link";
+  target: string;
+  source: "start_menu" | "desktop" | "registry";
+  confidence: "high" | "medium" | "low";
+  alreadyExists: boolean;
+}
+
 export interface BootstrapData {
   items: LaunchItem[];
   groups: Group[];

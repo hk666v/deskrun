@@ -11,8 +11,9 @@ use uuid::Uuid;
 use crate::{
     icons,
     models::{
-        BootstrapData, ConfigDirectoryInfo, CreateItemPayload, Group, IconSource, LaunchItem,
-        LaunchItemKind, PersistedItems, Settings, UpdateItemPayload, WindowSizeLimits,
+        BootstrapData, ConfigDirectoryInfo, CreateItemPayload, DiscoveryCandidateImport, Group,
+        IconSource, LaunchItem, LaunchItemKind, PersistedItems, Settings, UpdateItemPayload,
+        WindowSizeLimits,
     },
 };
 
@@ -98,6 +99,10 @@ impl StorageState {
 
     pub fn current_data_dir(&self) -> &Path {
         &self.data_dir
+    }
+
+    pub fn all_items_for_discovery(&self) -> &[LaunchItem] {
+        &self.items_data.items
     }
 
     pub fn relocate(&self, app: &AppHandle, requested_dir: Option<&str>) -> Result<Self> {
@@ -327,6 +332,48 @@ impl StorageState {
             };
 
             created.push(self.create_item(payload)?);
+        }
+
+        Ok(created)
+    }
+
+    pub fn import_discovery_candidates(
+        &mut self,
+        candidates: Vec<DiscoveryCandidateImport>,
+    ) -> Result<Vec<LaunchItem>> {
+        let mut created = Vec::new();
+        let mut existing_targets: std::collections::HashSet<String> = self
+            .items_data
+            .items
+            .iter()
+            .map(|item| item_target_key(&item.target))
+            .collect();
+
+        for candidate in candidates {
+            if !matches!(candidate.kind, LaunchItemKind::Exe | LaunchItemKind::Link) {
+                continue;
+            }
+
+            let target_key = item_target_key(&candidate.target);
+            if existing_targets.contains(&target_key) {
+                continue;
+            }
+
+            let item = self.create_item(CreateItemPayload {
+                kind: candidate.kind,
+                target: candidate.target,
+                name: Some(candidate.name),
+                command: None,
+                note: None,
+                fixed_args: None,
+                runtime_args: None,
+                working_dir: None,
+                keep_open: None,
+                group_id: None,
+            })?;
+
+            existing_targets.insert(target_key);
+            created.push(item);
         }
 
         Ok(created)
@@ -659,6 +706,10 @@ fn normalize_text(value: String) -> Option<String> {
     } else {
         Some(trimmed)
     }
+}
+
+pub fn item_target_key(target: &str) -> String {
+    target.trim().replace('/', "\\").to_ascii_lowercase()
 }
 
 fn normalize_group_name(value: &str) -> Result<String> {
