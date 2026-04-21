@@ -16,6 +16,7 @@ import {
   launchItem,
   openConfigDirectory,
   renameGroup,
+  reorderGroups,
   reorderItems,
   scanDiscoveryCandidates,
   setConfigDirectory,
@@ -487,6 +488,26 @@ function App() {
     setItems(updatedItems);
   };
 
+  const handleReorderGroups = async (
+    fromId: string,
+    toId: string,
+    placement: "before" | "after",
+  ) => {
+    const nextIds = groups().map((group) => group.id);
+    const fromIndex = nextIds.indexOf(fromId);
+    const toIndex = nextIds.indexOf(toId);
+    if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) {
+      return;
+    }
+
+    const [moved] = nextIds.splice(fromIndex, 1);
+    const targetIndex = nextIds.indexOf(toId);
+    const insertIndex = placement === "after" ? targetIndex + 1 : targetIndex;
+    nextIds.splice(insertIndex, 0, moved);
+    const updatedGroups = await reorderGroups(nextIds);
+    setGroups(updatedGroups);
+  };
+
   const moveSelection = (delta: number) => {
     if (currentGroupId() === DISCOVERY_VIEW_ID) {
       return;
@@ -662,6 +683,7 @@ function App() {
           currentGroupId={currentGroupId()}
           discoveryCount={discoveryCandidates().filter((candidate) => !candidate.alreadyExists).length}
           onSelect={setCurrentGroupId}
+          onReorderGroups={handleReorderGroups}
         />
 
         <Show
