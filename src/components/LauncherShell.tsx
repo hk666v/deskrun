@@ -19,7 +19,10 @@ export function LauncherShell(props: LauncherShellProps) {
 
   return (
     <main
-      tabIndex={-1}
+      tabIndex={0}
+      onMouseDownCapture={(event) => {
+        event.currentTarget.focus();
+      }}
       class="relative h-screen overflow-hidden rounded-[32px] bg-[linear-gradient(180deg,#121a27,#161f2d)] p-5 text-white outline-none"
     >
       <div

@@ -315,6 +315,11 @@ pub fn open_config_directory(
         .map_err(|error| error.to_string())
 }
 
+#[tauri::command]
+pub fn hide_main_window(app: AppHandle) -> Result<(), String> {
+    hotkey::hide_main_window(&app).map_err(|error| error.to_string())
+}
+
 pub fn apply_launch_on_startup(
     app: &AppHandle,
     storage: &mut crate::storage::StorageState,

@@ -9,6 +9,7 @@ import {
   deleteItem,
   exportConfig,
   getBootstrapData,
+  hideMainWindow,
   importConfig,
   importDiscoveryCandidates,
   importPaths,
@@ -521,7 +522,36 @@ function App() {
     setSettingsOpen(false);
     setContextMenu(null);
     clearHoverPreview();
-    await currentWindow.hide();
+    await hideMainWindow();
+  };
+
+  const handleAppKeyDown = async (event: KeyboardEvent) => {
+    if (event.key === "Escape" || event.code === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      await hideLauncher();
+      return;
+    }
+
+    if (event.key === "ArrowRight") {
+      event.preventDefault();
+      moveSelection(selectionStep("horizontal", 1));
+    } else if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      moveSelection(selectionStep("horizontal", -1));
+    } else if (event.key === "ArrowDown") {
+      event.preventDefault();
+      moveSelection(selectionStep("vertical", 1));
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      moveSelection(selectionStep("vertical", -1));
+    } else if (event.key === "Enter") {
+      const item = visibleItems().find((entry) => entry.id === selectedItemId());
+      if (item) {
+        event.preventDefault();
+        await handleLaunch(item);
+      }
+    }
   };
 
   onMount(async () => {
@@ -577,47 +607,7 @@ function App() {
       }, 140);
     });
 
-    const handleEscape = async (event: KeyboardEvent) => {
-      if (event.key === "Escape" || event.code === "Escape") {
-        event.preventDefault();
-        event.stopPropagation();
-        await hideLauncher();
-      }
-    };
-
-    const handleKeyDown = async (event: KeyboardEvent) => {
-      if (event.key === "Escape" || event.code === "Escape") {
-        await handleEscape(event);
-        return;
-      }
-
-      if (event.key === "ArrowRight") {
-        event.preventDefault();
-        moveSelection(selectionStep("horizontal", 1));
-      } else if (event.key === "ArrowLeft") {
-        event.preventDefault();
-        moveSelection(selectionStep("horizontal", -1));
-      } else if (event.key === "ArrowDown") {
-        event.preventDefault();
-        moveSelection(selectionStep("vertical", 1));
-      } else if (event.key === "ArrowUp") {
-        event.preventDefault();
-        moveSelection(selectionStep("vertical", -1));
-      } else if (event.key === "Enter") {
-        const item = visibleItems().find((entry) => entry.id === selectedItemId());
-        if (item) {
-          event.preventDefault();
-          await handleLaunch(item);
-        }
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown, true);
-    window.addEventListener("keyup", handleEscape, true);
-    document.addEventListener("keydown", handleKeyDown, true);
-    document.addEventListener("keyup", handleEscape, true);
-    document.body?.addEventListener("keydown", handleKeyDown, true);
-    document.body?.addEventListener("keyup", handleEscape, true);
+    document.addEventListener("keydown", handleAppKeyDown, true);
 
     onCleanup(() => {
       clearHoverPreview();
@@ -626,12 +616,7 @@ function App() {
       unlistenFocusSearch();
       unlistenResized();
       window.clearTimeout(resizeSyncTimer);
-      window.removeEventListener("keydown", handleKeyDown, true);
-      window.removeEventListener("keyup", handleEscape, true);
-      document.removeEventListener("keydown", handleKeyDown, true);
-      document.removeEventListener("keyup", handleEscape, true);
-      document.body?.removeEventListener("keydown", handleKeyDown, true);
-      document.body?.removeEventListener("keyup", handleEscape, true);
+      document.removeEventListener("keydown", handleAppKeyDown, true);
     });
   });
 

@@ -1,4 +1,4 @@
-import { Show } from "solid-js";
+import { Show, createEffect, createMemo, createSignal } from "solid-js";
 import type { LaunchItem } from "../types";
 
 interface ItemContextMenuProps {
@@ -15,16 +15,43 @@ interface ItemContextMenuProps {
 }
 
 export function ItemContextMenu(props: ItemContextMenuProps) {
+  const [menuSize, setMenuSize] = createSignal({ width: 220, height: 240 });
+  let menuRef: HTMLDivElement | undefined;
+
+  createEffect(() => {
+    if (!props.open || !menuRef) {
+      return;
+    }
+
+    setMenuSize({
+      width: menuRef.offsetWidth,
+      height: menuRef.offsetHeight,
+    });
+  });
+
+  const menuPosition = createMemo(() => {
+    const margin = 16;
+    const { width, height } = menuSize();
+    const maxLeft = Math.max(margin, window.innerWidth - width - margin);
+    const maxTop = Math.max(margin, window.innerHeight - height - margin);
+
+    return {
+      left: Math.min(Math.max(props.x, margin), maxLeft),
+      top: Math.min(Math.max(props.y, margin), maxTop),
+    };
+  });
+
   return (
     <Show when={props.open && props.item}>
       {(item) => (
         <>
           <div class="absolute inset-0 z-40" onMouseDown={props.onClose} />
           <div
+            ref={menuRef}
             class="absolute z-50 min-w-[180px] overflow-hidden rounded-[22px] border border-white/14 bg-[linear-gradient(180deg,rgba(10,18,30,0.98),rgba(12,20,32,0.96))] p-2 shadow-[0_26px_80px_rgba(0,0,0,0.34)] backdrop-blur-xl"
             style={{
-              left: `${props.x}px`,
-              top: `${props.y}px`,
+              left: `${menuPosition().left}px`,
+              top: `${menuPosition().top}px`,
             }}
           >
             <MenuButton onClick={() => props.onLaunch(item())}>Launch</MenuButton>

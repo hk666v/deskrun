@@ -104,3 +104,7 @@ export function importConfig(sourceDir: string) {
 export function openConfigDirectory() {
   return invoke<void>("open_config_directory");
 }
+
+export function hideMainWindow() {
+  return invoke<void>("hide_main_window");
+}

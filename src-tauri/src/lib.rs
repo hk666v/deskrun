@@ -96,6 +96,7 @@ pub fn run() {
             commands::export_config,
             commands::import_config,
             commands::open_config_directory,
+            commands::hide_main_window,
         ])
         .run(tauri::generate_context!())
         .expect("error while running deskrun");
