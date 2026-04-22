@@ -26,7 +26,7 @@ export function LauncherShell(props: LauncherShellProps) {
       class="relative h-screen overflow-hidden rounded-[32px] bg-[linear-gradient(180deg,#121a27,#161f2d)] p-5 text-white outline-none"
     >
       <div
-        class="absolute left-5 right-5 top-5 z-10 h-[74px] cursor-move select-none"
+        class="absolute left-5 right-5 top-5 z-10 h-[36px] cursor-move select-none"
         onMouseDown={(event) => {
           if (event.button !== 0) {
             return;

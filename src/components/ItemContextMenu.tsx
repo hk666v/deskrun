@@ -56,7 +56,7 @@ export function ItemContextMenu(props: ItemContextMenuProps) {
           >
             <MenuButton onClick={() => props.onLaunch(item())}>Launch</MenuButton>
             <MenuButton onClick={() => props.onToggleFavorite(item())}>
-              {item().isFavorite ? "Remove Favorite" : "Add Favorite"}
+              {item().isFavorite ? "Unpin" : "Pin"}
             </MenuButton>
             <Show when={item().kind === "command"}>
               <MenuButton onClick={() => props.onCopyCommand(item())}>

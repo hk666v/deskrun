@@ -195,6 +195,15 @@ function App() {
       .map(({ item }) => item);
   });
 
+  const shouldSectionListItems = createMemo(
+    () =>
+      settings().displayMode === "list" &&
+      !query().trim() &&
+      currentGroupId() !== FAVORITES_VIEW_ID &&
+      currentGroupId() !== RECENT_VIEW_ID &&
+      currentGroupId() !== DISCOVERY_VIEW_ID,
+  );
+
   const syncSelection = (nextItems: LaunchItem[]) => {
     if (currentGroupId() === DISCOVERY_VIEW_ID) {
       setSelectedItemId(null);
@@ -470,7 +479,7 @@ function App() {
     setItems((current) =>
       current.map((entry) => (entry.id === updated.id ? updated : entry)),
     );
-    notify(updated.isFavorite ? "Added to favorites" : "Removed from favorites");
+    notify(updated.isFavorite ? "Pinned" : "Unpinned");
   };
 
   const handleReorder = async (fromId: string, toId: string) => {
@@ -647,21 +656,13 @@ function App() {
 
   return (
     <LauncherShell dragging={draggingExternal()}>
-      <div class="flex h-full flex-col gap-4">
+      <div class="flex h-full flex-col gap-3">
         <div
-          class="flex items-center justify-between gap-4 rounded-[24px] px-1 py-1 select-none"
+          class="flex items-center justify-between gap-4 rounded-[24px] px-1 py-0.5 select-none"
         >
-          <div>
-            <p class="text-[11px] uppercase tracking-[0.28em] text-white/36">
-              Windows 11 Launcher
-            </p>
-            <h1 class="mt-2 text-[30px] font-semibold tracking-[-0.03em] text-white">
-              DeskRun
-            </h1>
-          </div>
-          <div class="rounded-full border border-white/12 bg-black/10 px-4 py-2 text-sm text-white/52">
-            {feedback() || "Left-click to launch, right-click for actions"}
-          </div>
+          <h1 class="text-[24px] font-semibold tracking-[-0.03em] text-white">
+            DeskRun
+          </h1>
         </div>
 
         <SearchBar
@@ -693,6 +694,7 @@ function App() {
               items={visibleItems()}
               viewMode={settings().displayMode}
               activeItemId={selectedItemId()}
+              sectioned={shouldSectionListItems()}
               sortable={
                 !query() &&
                 currentGroupId() !== FAVORITES_VIEW_ID &&
@@ -994,6 +996,12 @@ function App() {
           }
         }}
       />
+
+      <Show when={feedback()}>
+        <div class="pointer-events-none absolute bottom-5 right-5 z-40 rounded-full border border-white/10 bg-[linear-gradient(180deg,rgba(10,18,30,0.94),rgba(12,20,32,0.9))] px-4 py-2 text-sm text-white/72 shadow-[0_18px_42px_rgba(0,0,0,0.28)] backdrop-blur-xl">
+          {feedback()}
+        </div>
+      </Show>
     </LauncherShell>
   );
 }
