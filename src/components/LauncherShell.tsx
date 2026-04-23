@@ -23,7 +23,7 @@ export function LauncherShell(props: LauncherShellProps) {
       onMouseDownCapture={(event) => {
         event.currentTarget.focus();
       }}
-      class="relative h-screen overflow-hidden rounded-[32px] bg-[linear-gradient(180deg,#121a27,#161f2d)] p-5 text-white outline-none"
+      class="relative h-screen overflow-hidden rounded-[32px] bg-[#0F1117] p-5 text-white outline-none"
     >
       <div
         class="absolute left-5 right-5 top-5 z-10 h-[36px] cursor-move select-none"
@@ -80,7 +80,7 @@ export function LauncherShell(props: LauncherShellProps) {
       />
 
       {props.dragging && (
-        <div class="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-[32px] border border-dashed border-white/34 bg-sky-100/8 text-center text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.1)] backdrop-blur-md">
+        <div class="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-[32px] border border-dashed border-white/18 bg-[#161820]/92 text-center text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.05)] backdrop-blur-md">
           <div>
             <p class="text-xl font-semibold">Drop files to add them</p>
             <p class="mt-2 text-sm text-white/55">

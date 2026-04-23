@@ -41,12 +41,13 @@ export function ItemGrid(props: ItemGridProps) {
     ].filter((section) => section.items.length > 0);
   });
 
-  const renderItem = (item: LaunchItem) => (
+  const renderItem = (item: LaunchItem, subdued = false) => (
     <ItemCard
       item={item}
       layout={props.viewMode}
       active={item.id === props.activeItemId}
       draggable={props.sortable}
+      subdued={subdued}
       onSelect={() => props.onSelect(item)}
       onPreviewHover={(x, y) => props.onPreviewHover(item, x, y)}
       onPreviewLeave={props.onPreviewLeave}
@@ -72,11 +73,11 @@ export function ItemGrid(props: ItemGridProps) {
   );
 
   return (
-    <div class="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-[30px] border border-white/16 bg-[linear-gradient(180deg,rgba(255,255,255,0.18),rgba(255,255,255,0.08))] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]">
+    <div class="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-[30px] border border-white/8 bg-[#161820] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
       <Show
         when={props.items.length > 0}
         fallback={
-          <div class="flex h-full min-h-[280px] flex-col items-center justify-center gap-3 rounded-[24px] border border-dashed border-white/18 bg-black/10 text-center text-white/55">
+          <div class="flex h-full min-h-[280px] flex-col items-center justify-center gap-3 rounded-[24px] border border-dashed border-white/10 bg-[#0F1117] text-center text-white/55">
             <p class="text-lg font-medium text-white/80">No launch items yet</p>
             <p class="max-w-sm text-sm leading-6">
               Add `.exe`, `.lnk`, folders, URLs, or CMD commands from the top bar,
@@ -111,13 +112,15 @@ export function ItemGrid(props: ItemGridProps) {
               {(section) => (
                 <section class="flex flex-col gap-2.5">
                   <div class="flex items-center gap-3 px-1">
-                    <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/42">
+                    <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/40">
                       {section.title}
                     </div>
-                    <div class="h-px flex-1 bg-white/8" />
+                    <div class="h-px flex-1 bg-white/10" />
                   </div>
                   <div class="flex flex-col gap-2">
-                    <For each={section.items}>{renderItem}</For>
+                    <For each={section.items}>
+                      {(item) => renderItem(item, section.id === "unused")}
+                    </For>
                   </div>
                 </section>
               )}

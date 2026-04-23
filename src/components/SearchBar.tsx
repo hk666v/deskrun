@@ -15,23 +15,20 @@ interface SearchBarProps {
 export function SearchBar(props: SearchBarProps) {
   return (
     <div class="flex items-center gap-3">
-      <div class="flex min-w-0 flex-1 items-center gap-3 rounded-[26px] border border-white/18 bg-white/12 px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.32)]">
-        <div class="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/12 bg-black/10 text-[11px] font-semibold tracking-[0.22em] text-white/65">
-          RUN
-        </div>
+      <div class="flex min-w-0 flex-1 items-center gap-3 rounded-[26px] border border-white/8 bg-[#161820] px-4 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition hover:bg-[#1C1F2A]">
         <div class="flex min-w-0 flex-1 flex-col">
-          <label class="text-[11px] uppercase tracking-[0.24em] text-white/40">
+          <label class="text-[11px] uppercase tracking-[0.24em] text-white/38">
             Search your launcher
           </label>
           <input
             ref={props.inputRef}
             value={props.query}
             onInput={props.onInput}
-            placeholder="搜索你已经添加的应用、目录或网址"
-            class="mt-1 w-full bg-transparent text-base text-white outline-none placeholder:text-white/32"
+            placeholder="Search apps, folders, commands, or URLs"
+            class="mt-1 w-full bg-transparent text-base text-white outline-none placeholder:text-white/28"
           />
         </div>
-        <div class="rounded-full border border-white/14 bg-white/8 px-3 py-1 text-xs text-white/45">
+        <div class="rounded-full border border-white/8 bg-[#0F1117] px-3 py-1 text-xs text-white/42">
           {props.hotkey}
         </div>
       </div>
@@ -61,8 +58,8 @@ function ActionButton(props: ActionButtonProps) {
       onClick={props.onClick}
       class={`rounded-2xl border px-4 py-3 text-sm font-medium transition ${
         props.emphasis
-          ? "border-white/40 bg-white text-slate-900 shadow-[0_12px_30px_rgba(15,23,42,0.22)]"
-          : "border-white/18 bg-white/12 text-white/82 hover:bg-white/18"
+          ? "border-white/12 bg-[#1C1F2A] text-white shadow-[0_12px_30px_rgba(0,0,0,0.22)] hover:bg-[#232735]"
+          : "border-white/8 bg-[#161820] text-white/78 hover:bg-[#1C1F2A] hover:text-white/92"
       }`}
     >
       {props.children}

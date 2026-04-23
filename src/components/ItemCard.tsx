@@ -21,6 +21,7 @@ interface ItemCardProps {
   layout: "grid" | "list";
   active: boolean;
   draggable: boolean;
+  subdued?: boolean;
   onClick: () => void;
   onSelect: () => void;
   onPreviewHover: (x: number, y: number) => void;
@@ -76,15 +77,15 @@ export function ItemCard(props: ItemCardProps) {
   };
 
   const visualTheme = () => resolveItemVisualTheme(props.item);
-
+  const subduedClass = () => (props.subdued ? "opacity-55 hover:opacity-100 focus-visible:opacity-100" : "");
   const launchCountLabel = () => `↑ ${props.item.launchCount}`;
   const launchCountClass = () =>
     props.item.launchCount > 0
-      ? "text-emerald-300/90 group-hover:text-emerald-200"
+      ? "text-emerald-300/88 group-hover:text-emerald-200"
       : "text-white/34 group-hover:text-white/42";
   const launchTimeClass = () =>
     props.item.launchCount > 0
-      ? "text-emerald-100/62 group-hover:text-emerald-100/74"
+      ? "text-emerald-100/58 group-hover:text-emerald-100/72"
       : "text-white/26 group-hover:text-white/34";
 
   return (
@@ -116,18 +117,16 @@ export function ItemCard(props: ItemCardProps) {
           onDragStart={props.onDragStart}
           onDragOver={props.onDragOver}
           onDrop={props.onDrop}
-          class={`group relative grid min-h-[178px] min-w-0 w-full grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-hidden rounded-[24px] border px-4 py-4 text-left transition duration-200 ${
-            props.active
-              ? "border-white/42 bg-[linear-gradient(180deg,rgba(255,255,255,0.18),rgba(255,255,255,0.08))] shadow-[0_14px_34px_rgba(9,18,34,0.2)]"
-              : "border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.1),rgba(255,255,255,0.05))] hover:-translate-y-[1px] hover:border-white/24 hover:bg-[linear-gradient(180deg,rgba(255,255,255,0.14),rgba(255,255,255,0.07))]"
-          }`}
+          class={`group relative grid min-h-[178px] min-w-0 w-full grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-hidden rounded-[24px] border border-white/8 bg-[#161820] px-4 py-4 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition duration-200 ${
+            props.active ? "bg-[#1C1F2A]" : "hover:bg-[#1C1F2A]"
+          } ${subduedClass()}`}
         >
           <div class="grid min-w-0 grid-cols-[48px_minmax(0,1fr)] items-start gap-3">
-            <div class="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-[16px] border border-white/14 bg-[linear-gradient(180deg,rgba(250,252,255,0.96),rgba(236,244,255,0.92))] shadow-[inset_0_1px_0_rgba(255,255,255,0.78),0_8px_18px_rgba(10,18,34,0.1)]">
+            <div class={`flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-[16px] border shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] ${visualTheme().iconClass}`}>
               <Show
                 when={iconSrc()}
                 fallback={
-                  <span class="text-[10px] font-semibold tracking-[0.2em] text-slate-600">
+                  <span class={`text-[10px] font-semibold tracking-[0.2em] ${visualTheme().fallbackTextClass}`}>
                     {FALLBACK_LABEL[props.item.kind]}
                   </span>
                 }
@@ -149,34 +148,19 @@ export function ItemCard(props: ItemCardProps) {
                   {props.item.name}
                 </div>
               </div>
-
-              <div class="flex flex-wrap items-center gap-1.5">
-                <Show when={props.item.isFavorite}>
-                  <div
-                    class="flex h-6 items-center gap-1 rounded-full border border-amber-200/20 bg-amber-300/10 px-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
-                    title="Favorite"
-                    aria-label="Favorite"
-                  >
-                    <span class="h-2 w-2 rounded-full bg-amber-200/90" />
-                    <span class="text-[9px] font-semibold uppercase tracking-[0.14em] text-amber-100/78">
-                      Fav
-                    </span>
-                  </div>
-                </Show>
-              </div>
             </div>
           </div>
 
           <div class="flex min-h-0 min-w-0 flex-col gap-2.5">
-            <div class="min-w-0 max-w-full overflow-hidden rounded-[16px] border border-white/8 bg-black/12 px-3 py-2.5">
-              <div class="block min-w-0 max-w-full truncate text-[11px] leading-4 text-white/56">
+            <div class="min-w-0 max-w-full overflow-hidden rounded-[16px] border border-white/8 bg-[#0F1117] px-3 py-2.5">
+              <div class="block min-w-0 max-w-full truncate font-mono text-[11px] leading-4 text-white/52">
                 {targetValue()}
               </div>
             </div>
 
             <Show when={notePreview()}>
-              <div class="min-w-0 max-w-full overflow-hidden rounded-[16px] border border-white/8 bg-white/[0.04] px-3 py-2">
-                <div class="block min-w-0 max-w-full truncate text-[11px] leading-4 text-white/50">
+              <div class="min-w-0 max-w-full overflow-hidden rounded-[16px] border border-white/8 bg-[#0F1117] px-3 py-2">
+                <div class="block min-w-0 max-w-full truncate text-[11px] leading-4 text-white/48">
                   {notePreview()}
                 </div>
               </div>
@@ -210,27 +194,21 @@ export function ItemCard(props: ItemCardProps) {
         onDragStart={props.onDragStart}
         onDragOver={props.onDragOver}
         onDrop={props.onDrop}
-        class={`group relative grid w-full min-w-0 grid-cols-[42px_minmax(0,1fr)_72px] items-stretch gap-3 overflow-hidden rounded-[18px] border px-3.5 py-2.5 text-left transition duration-200 ${
+        class={`group relative grid w-full min-w-0 grid-cols-[42px_minmax(0,1fr)_72px] items-stretch gap-3 overflow-hidden rounded-[18px] border border-white/8 bg-[#161820] px-3.5 py-2.5 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition duration-200 ${
           hasNote() ? "min-h-[92px]" : "min-h-[76px]"
         } ${
-          props.active
-            ? "border-white/28 bg-[linear-gradient(180deg,rgba(255,255,255,0.15),rgba(255,255,255,0.07))] shadow-[0_14px_28px_rgba(9,18,34,0.16)]"
-            : "border-white/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.078),rgba(255,255,255,0.036))] hover:-translate-y-[1px] hover:border-white/14 hover:bg-[linear-gradient(180deg,rgba(255,255,255,0.11),rgba(255,255,255,0.048))]"
-        }`}
+          props.active ? "bg-[#1C1F2A]" : "hover:bg-[#1C1F2A]"
+        } ${subduedClass()}`}
       >
         <Show when={props.item.isFavorite}>
           <div class="absolute inset-y-3 left-0 w-[3px] rounded-r-full bg-amber-300/88" />
         </Show>
 
-        <div
-          class={`mt-0.5 flex h-10 w-10 shrink-0 self-start items-center justify-center overflow-hidden rounded-[13px] border shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] transition ${visualTheme().iconClass}`}
-        >
+        <div class={`mt-0.5 flex h-10 w-10 shrink-0 self-start items-center justify-center overflow-hidden rounded-[13px] border shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] ${visualTheme().iconClass}`}>
           <Show
             when={iconSrc()}
             fallback={
-              <span
-                class={`text-[9px] font-semibold tracking-[0.16em] ${visualTheme().fallbackTextClass}`}
-              >
+              <span class={`text-[9px] font-semibold tracking-[0.16em] ${visualTheme().fallbackTextClass}`}>
                 {FALLBACK_LABEL[props.item.kind]}
               </span>
             }
@@ -259,11 +237,7 @@ export function ItemCard(props: ItemCardProps) {
                 {props.item.name}
               </div>
               <Show when={props.item.isFavorite}>
-                <span
-                  class="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-300"
-                  title="Favorite"
-                  aria-label="Favorite"
-                />
+                <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-300" title="Pinned" aria-label="Pinned" />
               </Show>
             </div>
 
@@ -272,7 +246,7 @@ export function ItemCard(props: ItemCardProps) {
             </div>
 
             <Show when={hasNote()}>
-              <div class="truncate whitespace-nowrap text-[12px] leading-[18px] text-slate-200/46 transition group-hover:text-slate-100/56">
+              <div class="truncate whitespace-nowrap text-[12px] leading-[18px] text-slate-200/44 transition group-hover:text-slate-100/56">
                 {notePreview()}
               </div>
             </Show>
@@ -342,8 +316,8 @@ function resolveItemVisualTheme(item: LaunchItem): ItemVisualTheme {
       };
     default:
       return {
-        iconClass: "border-[#28445C] bg-[#162232] text-sky-100/90",
-        fallbackTextClass: "text-sky-100/78",
+        iconClass: "border-[#1A417A] bg-[#0D1E35] text-[#2563EB]",
+        fallbackTextClass: "text-[#60A5FA]",
       };
   }
 }

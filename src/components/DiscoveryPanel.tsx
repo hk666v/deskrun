@@ -21,6 +21,7 @@ interface DiscoveryPanelProps {
 
 export function DiscoveryPanel(props: DiscoveryPanelProps) {
   let selectAllRef!: HTMLInputElement;
+  const rowColumns = "grid-cols-[18px_minmax(0,1fr)_86px_46px_72px]";
 
   const filteredCandidates = createMemo(() => {
     const term = props.searchQuery.trim().toLowerCase();
@@ -49,8 +50,7 @@ export function DiscoveryPanel(props: DiscoveryPanelProps) {
   const importableCount = createMemo(
     () =>
       props.candidates.filter(
-        (candidate) =>
-          props.selectedIds.includes(candidate.id) && !candidate.alreadyExists,
+        (candidate) => props.selectedIds.includes(candidate.id) && !candidate.alreadyExists,
       ).length,
   );
 
@@ -93,72 +93,63 @@ export function DiscoveryPanel(props: DiscoveryPanelProps) {
   });
 
   return (
-    <div class="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-[30px] border border-white/16 bg-[linear-gradient(180deg,rgba(255,255,255,0.18),rgba(255,255,255,0.08))] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]">
-      <div class="rounded-[22px] border border-white/10 bg-black/10 p-4">
-        <div class="flex flex-wrap items-start justify-between gap-4">
+    <div class="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-[30px] border border-white/8 bg-[#161820] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+      <div class="rounded-[22px] border border-white/8 bg-[#0F1117] p-3.5">
+        <div class="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <div class="text-[11px] uppercase tracking-[0.22em] text-white/34">
+            <div class="text-[11px] uppercase tracking-[0.22em] text-white/32">
               App Discovery
             </div>
-            <h2 class="mt-1 text-lg font-semibold text-white">Find installed apps</h2>
-            <p class="mt-2 max-w-2xl text-sm leading-6 text-white/46">
+            <h2 class="mt-0.5 text-[17px] font-semibold text-white">Find installed apps</h2>
+            <p class="mt-1 max-w-2xl text-[12px] leading-5 text-white/42">
               Scan Start Menu shortcuts, desktop shortcuts, and installed app registry
               entries, then import the ones you want into DeskRun.
             </p>
           </div>
 
           <div class="flex flex-wrap items-center gap-2">
-            <label class="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-white/68">
-              <input
-                type="checkbox"
-                checked={props.hideExisting}
-                onChange={(event) => props.onSetHideExisting(event.currentTarget.checked)}
-                class="h-4 w-4 accent-white"
-              />
-              Hide existing
-            </label>
+            <ToggleChip
+              label="Hide existing"
+              checked={props.hideExisting}
+              onChange={props.onSetHideExisting}
+            />
 
             <button
               type="button"
               disabled={props.busy}
-              onClick={props.onImportSelected}
-              class="rounded-2xl border border-white/14 bg-white/[0.06] px-4 py-3 text-sm font-medium text-white/82 transition hover:bg-white/[0.1] disabled:cursor-not-allowed disabled:opacity-45"
+              onClick={props.onScan}
+              class="rounded-2xl border border-white/10 bg-transparent px-3.5 py-2.5 text-sm font-medium text-white/78 transition hover:bg-[#1C1F2A] hover:text-white disabled:cursor-not-allowed disabled:opacity-45"
             >
-              Import Selected ({importableCount()})
+              {props.busy ? "Scanning..." : "Scan Apps"}
             </button>
 
             <button
               type="button"
-              disabled={
-                props.busy ||
-                (!props.scanOptions.startMenu &&
-                  !props.scanOptions.desktop &&
-                  !props.scanOptions.registry)
-              }
-              onClick={props.onScan}
-              class="rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-slate-900 shadow-[0_12px_30px_rgba(15,23,42,0.22)] disabled:cursor-not-allowed disabled:opacity-45"
+              disabled={props.busy || importableCount() === 0}
+              onClick={props.onImportSelected}
+              class="rounded-2xl border border-[#2563EB] bg-[#2563EB] px-3.5 py-2.5 text-sm font-semibold text-white shadow-[0_12px_30px_rgba(37,99,235,0.28)] transition hover:bg-[#3B82F6] disabled:cursor-not-allowed disabled:opacity-45"
             >
-              {props.busy ? "Scanning..." : "Scan Apps"}
+              Import Selected ({importableCount()})
             </button>
           </div>
         </div>
 
-        <div class="mt-4 flex flex-wrap gap-2">
-          <SourcePill
+        <div class="mt-3 flex flex-wrap gap-2">
+          <SourceChip
             label="Start Menu"
             checked={props.scanOptions.startMenu}
             onChange={(checked) =>
               props.onSetScanOptions({ ...props.scanOptions, startMenu: checked })
             }
           />
-          <SourcePill
+          <SourceChip
             label="Desktop"
             checked={props.scanOptions.desktop}
             onChange={(checked) =>
               props.onSetScanOptions({ ...props.scanOptions, desktop: checked })
             }
           />
-          <SourcePill
+          <SourceChip
             label="Registry"
             checked={props.scanOptions.registry}
             onChange={(checked) =>
@@ -167,9 +158,9 @@ export function DiscoveryPanel(props: DiscoveryPanelProps) {
           />
         </div>
 
-        <div class="mt-4 flex flex-wrap items-center gap-3">
-          <label class="flex min-w-[220px] flex-1 items-center gap-3 rounded-[18px] border border-white/10 bg-black/10 px-3 py-2.5">
-            <span class="text-[11px] uppercase tracking-[0.18em] text-white/30">Search</span>
+        <div class="mt-3 flex flex-wrap items-center gap-2.5">
+          <label class="flex min-w-[220px] flex-1 items-center gap-3 rounded-[16px] border border-white/8 bg-[#161820] px-3 py-2">
+            <span class="text-[11px] uppercase tracking-[0.18em] text-white/28">Search</span>
             <input
               value={props.searchQuery}
               onInput={(event) => props.onSearchQueryChange(event.currentTarget.value)}
@@ -178,7 +169,7 @@ export function DiscoveryPanel(props: DiscoveryPanelProps) {
             />
           </label>
 
-          <label class="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-white/68">
+          <label class="flex items-center gap-2 rounded-full border border-white/8 bg-[#161820] px-3 py-1.5 text-xs text-white/64">
             <input
               ref={selectAllRef}
               type="checkbox"
@@ -191,8 +182,9 @@ export function DiscoveryPanel(props: DiscoveryPanelProps) {
             <span>Select all visible</span>
           </label>
 
-          <div class="rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-white/52">
-            {visibleSelectionSummary().visibleCount} visible / {visibleSelectionSummary().selectedVisibleCount} selected
+          <div class="rounded-full border border-white/8 bg-[#161820] px-3 py-1.5 text-xs text-white/46">
+            {visibleSelectionSummary().visibleCount} visible /{" "}
+            {visibleSelectionSummary().selectedVisibleCount} selected
           </div>
         </div>
 
@@ -203,20 +195,27 @@ export function DiscoveryPanel(props: DiscoveryPanelProps) {
         </Show>
       </div>
 
-      <div class="mt-4 min-h-0 flex-1 overflow-y-auto pr-1">
+      <div class="mt-3 min-h-0 flex-1 overflow-y-auto pr-1">
         <Show
           when={filteredCandidates().length > 0}
           fallback={
-            <div class="flex min-h-full items-center justify-center rounded-[24px] border border-dashed border-white/14 bg-black/10 px-6 text-center text-sm leading-7 text-white/42">
+            <div class="flex min-h-full items-center justify-center rounded-[24px] border border-dashed border-white/10 bg-[#0F1117] px-6 text-center text-sm leading-7 text-white/42">
               Run a scan to load candidates here. After that you can review, filter, and import
               them directly from this view.
             </div>
           }
         >
-          <div class="flex min-h-0 flex-col gap-3">
+          <div class="flex min-h-0 flex-col gap-1.5">
+            <div class={`sticky top-0 z-10 grid ${rowColumns} items-center gap-3 rounded-[14px] bg-[#161820] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/32`}>
+              <div />
+              <div>Name</div>
+              <div class="w-[86px] text-left">Source</div>
+              <div class="w-[46px] text-left">Priority</div>
+              <div class="w-[72px] text-left">Action</div>
+            </div>
             <For each={filteredCandidates()}>
               {(candidate) => (
-                <label class="flex items-start gap-3 rounded-[22px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.04))] px-4 py-3 transition hover:border-white/18 hover:bg-[linear-gradient(180deg,rgba(255,255,255,0.1),rgba(255,255,255,0.05))]">
+                <label class={`grid ${rowColumns} items-center gap-3 rounded-[16px] border border-white/8 bg-[#161820] px-3 py-2 transition hover:bg-[#1C1F2A]`}>
                   <input
                     type="checkbox"
                     checked={props.selectedIds.includes(candidate.id)}
@@ -224,50 +223,56 @@ export function DiscoveryPanel(props: DiscoveryPanelProps) {
                     onChange={(event) =>
                       props.onToggleSelected(candidate.id, event.currentTarget.checked)
                     }
-                    class="mt-0.5 h-4 w-4 shrink-0 accent-white"
+                    class="h-4 w-4 shrink-0 accent-white"
                   />
 
-                  <div class="min-w-0 flex-1">
-                    <div class="flex flex-wrap items-start justify-between gap-3">
-                      <div class="min-w-0">
-                        <div class="truncate text-[15px] font-semibold text-white">
-                          {candidate.name}
-                        </div>
-                        <div class="mt-1 text-[11px] uppercase tracking-[0.14em] text-white/28">
-                          {candidate.kind}
-                        </div>
+                  <div class="min-w-0">
+                    <div class="flex min-w-0 items-center gap-2">
+                      <div class="truncate text-[13px] font-medium text-white/92">
+                        {candidate.name}
                       </div>
-
-                      <div class="flex flex-wrap items-center gap-1.5">
-                        <DiscoveryPill>{formatSourceLabel(candidate.source)}</DiscoveryPill>
-                        <DiscoveryPill>{candidate.confidence}</DiscoveryPill>
-                        <Show when={candidate.alreadyExists}>
-                          <DiscoveryPill tone="existing">Existing</DiscoveryPill>
-                        </Show>
-                        <Show when={!candidate.alreadyExists}>
-                          <button
-                            type="button"
-                            disabled={props.busy}
-                            onClick={(event) => {
-                              event.preventDefault();
-                              event.stopPropagation();
-                              props.onImportOne({
-                                name: candidate.name,
-                                kind: candidate.kind,
-                                target: candidate.target,
-                              });
-                            }}
-                            class="rounded-full border border-white/12 bg-white/[0.06] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/74 transition hover:bg-white/[0.1] disabled:cursor-not-allowed disabled:opacity-45"
-                          >
-                            Import
-                          </button>
-                        </Show>
-                      </div>
+                      <KindMeta kind={candidate.kind} />
                     </div>
-
-                    <div class="mt-3 break-all rounded-[16px] border border-white/8 bg-black/12 px-3 py-2.5 text-xs leading-6 text-white/54">
+                    <div
+                      class="truncate font-mono text-[11px] leading-4 text-white/34"
+                      title={candidate.target}
+                    >
                       {candidate.target}
                     </div>
+                  </div>
+
+                  <div class="w-[86px]">
+                    <SourceMeta>{formatSourceLabel(candidate.source)}</SourceMeta>
+                  </div>
+
+                  <div class="w-[46px]">
+                    <ConfidenceMeta confidence={candidate.confidence} />
+                  </div>
+
+                  <div class="w-[72px]">
+                    <Show when={!candidate.alreadyExists}>
+                      <button
+                        type="button"
+                        disabled={props.busy}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          props.onImportOne({
+                            name: candidate.name,
+                            kind: candidate.kind,
+                            target: candidate.target,
+                          });
+                        }}
+                        class="w-[72px] rounded-full border border-[#2563EB]/36 bg-[#2563EB]/14 px-0 py-1.5 text-center text-[9px] font-semibold uppercase tracking-[0.04em] text-[#93C5FD] transition hover:bg-[#2563EB]/22 hover:text-white disabled:cursor-not-allowed disabled:opacity-45"
+                      >
+                        Import
+                      </button>
+                    </Show>
+                    <Show when={candidate.alreadyExists}>
+                      <span class="inline-flex w-[72px] items-center justify-center rounded-full border border-sky-200/10 px-0 py-1.5 text-[9px] uppercase tracking-[0.04em] text-sky-100/58">
+                        Existing
+                      </span>
+                    </Show>
                   </div>
                 </label>
               )}
@@ -279,41 +284,102 @@ export function DiscoveryPanel(props: DiscoveryPanelProps) {
   );
 }
 
-interface SourcePillProps {
+interface SourceChipProps {
   label: string;
   checked: boolean;
   onChange: (value: boolean) => void;
 }
 
-function SourcePill(props: SourcePillProps) {
+function SourceChip(props: SourceChipProps) {
   return (
-    <label class="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-white/70">
+    <label
+      class={`inline-flex cursor-pointer items-center rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+        props.checked
+          ? "border-[#2563EB]/30 bg-[#2563EB]/14 text-[#BFDBFE]"
+          : "border-white/8 bg-[#161820] text-white/58 hover:bg-[#1C1F2A] hover:text-white/76"
+      }`}
+    >
       <input
         type="checkbox"
         checked={props.checked}
         onChange={(event) => props.onChange(event.currentTarget.checked)}
-        class="h-4 w-4 accent-white"
+        class="sr-only"
       />
-      <span>{props.label}</span>
+      {props.label}
     </label>
   );
 }
 
-interface DiscoveryPillProps {
-  children: string;
-  tone?: "default" | "existing";
+interface ToggleChipProps {
+  label: string;
+  checked: boolean;
+  onChange: (value: boolean) => void;
 }
 
-function DiscoveryPill(props: DiscoveryPillProps) {
+function ToggleChip(props: ToggleChipProps) {
   return (
-    <span
-      class={`rounded-full border px-2 py-1 text-[10px] uppercase tracking-[0.12em] ${
-        props.tone === "existing"
-          ? "border-sky-200/16 bg-sky-300/10 text-sky-100/72"
-          : "border-white/10 bg-white/[0.04] text-white/42"
+    <label
+      class={`inline-flex cursor-pointer items-center rounded-full border px-3 py-1.5 text-xs transition ${
+        props.checked
+          ? "border-white/12 bg-[#1C1F2A] text-white/86"
+          : "border-white/8 bg-[#161820] text-white/58 hover:bg-[#1C1F2A] hover:text-white/78"
       }`}
     >
+      <input
+        type="checkbox"
+        checked={props.checked}
+        onChange={(event) => props.onChange(event.currentTarget.checked)}
+        class="sr-only"
+      />
+      {props.label}
+    </label>
+  );
+}
+
+interface SourceMetaProps {
+  children: string;
+}
+
+function SourceMeta(props: SourceMetaProps) {
+  return (
+    <span class="inline-flex w-[86px] items-center justify-center rounded-full border border-white/8 px-0 py-1 text-[10px] uppercase tracking-[0.12em] text-white/40">
       {props.children}
+    </span>
+  );
+}
+
+interface KindMetaProps {
+  kind: DiscoveryCandidate["kind"];
+}
+
+function KindMeta(props: KindMetaProps) {
+  const tone =
+    props.kind === "link"
+      ? "border-[#694013] bg-[#2A1A07] text-[#FBBF24]"
+      : "border-[#1A417A] bg-[#0D1E35] text-[#60A5FA]";
+
+  return (
+    <span class={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] ${tone}`}>
+      {props.kind}
+    </span>
+  );
+}
+
+interface ConfidenceMetaProps {
+  confidence: DiscoveryCandidate["confidence"];
+}
+
+function ConfidenceMeta(props: ConfidenceMetaProps) {
+  const tone =
+    props.confidence === "high"
+      ? "bg-emerald-500/14 text-emerald-300"
+      : props.confidence === "medium"
+        ? "bg-amber-500/14 text-amber-300"
+        : "bg-rose-500/14 text-rose-300";
+
+  return (
+    <span class={`inline-flex w-[46px] items-center justify-center rounded-full px-0 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] ${tone}`}>
+      {props.confidence}
     </span>
   );
 }

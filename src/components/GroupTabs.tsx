@@ -1,4 +1,4 @@
-import { For, createSignal, onCleanup, onMount } from "solid-js";
+import { For, Show, createSignal, onCleanup, onMount } from "solid-js";
 import type { Group } from "../types";
 
 interface GroupTabsProps {
@@ -72,11 +72,7 @@ export function GroupTabs(props: GroupTabsProps) {
       }
 
       const target = resolveDropTarget(event.clientX, event.clientY);
-      setDropTarget(
-        target && target.groupId !== dragGroupId()
-          ? target
-          : null,
-      );
+      setDropTarget(target && target.groupId !== dragGroupId() ? target : null);
     };
 
     const handleMouseUp = async (event: MouseEvent) => {
@@ -100,54 +96,56 @@ export function GroupTabs(props: GroupTabsProps) {
     });
   });
 
+  const systemTabClass = (active: boolean) =>
+    active
+      ? "border-white/10 bg-[#1C1F2A] text-white"
+      : "border-transparent bg-transparent text-white/46 hover:bg-[#1C1F2A] hover:text-white/82";
+
   return (
-    <div class="flex min-w-0 items-center gap-3 rounded-[22px] border border-white/10 bg-black/10 px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+    <div class="flex min-w-0 items-center gap-3 rounded-[22px] border border-white/8 bg-[#161820] px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
       <div class="min-w-0 flex-1 overflow-x-auto">
         <div class="flex w-max items-center gap-2 pr-1">
           <button
             type="button"
             onClick={() => props.onSelect(null)}
-            class={`max-w-[180px] shrink-0 truncate rounded-full border px-3.5 py-1.5 text-[13px] font-medium transition ${
-              props.currentGroupId === null
-                ? "border-white/24 bg-white text-slate-900 shadow-[0_8px_18px_rgba(15,23,42,0.16)]"
-                : "border-transparent bg-white/[0.04] text-white/52 hover:bg-white/[0.08] hover:text-white/82"
-            }`}
+            class={`max-w-[180px] shrink-0 truncate rounded-full border px-3.5 py-1.5 text-[13px] font-medium transition ${systemTabClass(
+              props.currentGroupId === null,
+            )}`}
           >
             My Library
           </button>
           <button
             type="button"
             onClick={() => props.onSelect("__favorites__")}
-            class={`max-w-[180px] shrink-0 truncate rounded-full border px-3.5 py-1.5 text-[13px] font-medium transition ${
-              props.currentGroupId === "__favorites__"
-                ? "border-white/24 bg-white text-slate-900 shadow-[0_8px_18px_rgba(15,23,42,0.16)]"
-                : "border-transparent bg-white/[0.04] text-white/52 hover:bg-white/[0.08] hover:text-white/82"
-            }`}
+            class={`max-w-[180px] shrink-0 truncate rounded-full border px-3.5 py-1.5 text-[13px] font-medium transition ${systemTabClass(
+              props.currentGroupId === "__favorites__",
+            )}`}
           >
             Favorites
           </button>
           <button
             type="button"
             onClick={() => props.onSelect("__recent__")}
-            class={`max-w-[180px] shrink-0 truncate rounded-full border px-3.5 py-1.5 text-[13px] font-medium transition ${
-              props.currentGroupId === "__recent__"
-                ? "border-white/24 bg-white text-slate-900 shadow-[0_8px_18px_rgba(15,23,42,0.16)]"
-                : "border-transparent bg-white/[0.04] text-white/52 hover:bg-white/[0.08] hover:text-white/82"
-            }`}
+            class={`max-w-[180px] shrink-0 truncate rounded-full border px-3.5 py-1.5 text-[13px] font-medium transition ${systemTabClass(
+              props.currentGroupId === "__recent__",
+            )}`}
           >
             Recent
           </button>
           <button
             type="button"
             onClick={() => props.onSelect("__discovery__")}
-            class={`max-w-[180px] shrink-0 truncate rounded-full border px-3.5 py-1.5 text-[13px] font-medium transition ${
-              props.currentGroupId === "__discovery__"
-                ? "border-white/24 bg-white text-slate-900 shadow-[0_8px_18px_rgba(15,23,42,0.16)]"
-                : "border-transparent bg-white/[0.04] text-white/52 hover:bg-white/[0.08] hover:text-white/82"
-            }`}
+            class={`max-w-[180px] shrink-0 truncate rounded-full border px-3.5 py-1.5 text-[13px] font-medium transition ${systemTabClass(
+              props.currentGroupId === "__discovery__",
+            )}`}
           >
             {props.discoveryCount > 0 ? `Discovery (${props.discoveryCount})` : "Discovery"}
           </button>
+
+          <Show when={props.groups.length > 0}>
+            <div class="mx-1 h-5 w-px shrink-0 bg-white/10" />
+          </Show>
+
           <For each={props.groups}>
             {(group) => (
               <div class="relative shrink-0">
@@ -193,12 +191,12 @@ export function GroupTabs(props: GroupTabsProps) {
                   }}
                   class={`max-w-[180px] shrink-0 truncate rounded-full border px-3.5 py-1.5 text-[13px] font-medium select-none transition ${
                     dragGroupId() === group.id && dragActive()
-                      ? "cursor-grabbing border-sky-200/30 bg-sky-200/16 text-white shadow-[0_10px_24px_rgba(56,189,248,0.18)]"
+                      ? "cursor-grabbing border-sky-200/24 bg-[#1C1F2A] text-white shadow-[0_10px_24px_rgba(56,189,248,0.16)]"
                       : dropTarget()?.groupId === group.id
-                        ? "cursor-grab border-sky-200/26 bg-sky-200/12 text-white shadow-[0_10px_24px_rgba(56,189,248,0.12)]"
+                        ? "cursor-grab border-sky-200/22 bg-[#1C1F2A] text-white shadow-[0_10px_24px_rgba(56,189,248,0.1)]"
                         : props.currentGroupId === group.id
-                          ? "cursor-grab border-white/24 bg-white text-slate-900 shadow-[0_8px_18px_rgba(15,23,42,0.16)]"
-                          : "cursor-grab border-transparent bg-white/[0.04] text-white/52 hover:bg-white/[0.08] hover:text-white/82"
+                          ? "cursor-grab border-white/10 bg-[#1C1F2A] text-white"
+                          : "cursor-grab border-transparent bg-transparent text-white/46 hover:bg-[#1C1F2A] hover:text-white/82"
                   }`}
                   title={group.name}
                 >
