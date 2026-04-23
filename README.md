@@ -10,7 +10,19 @@ It is designed around one fast path:
 
 The current version focuses on a clean desktop experience, stable launching, and manual control over your launcher items.
 
-![DeskRun main window](docs/images/deskrun-main-window.png)
+## Screenshots
+
+### List View
+
+![DeskRun list view](docs/images/deskrun-list-view.png)
+
+### Grid View
+
+![DeskRun grid view](docs/images/deskrun-grid-view.png)
+
+### Discovery View
+
+![DeskRun discovery view](docs/images/deskrun-discovery-view.png)
 
 ## Features
 

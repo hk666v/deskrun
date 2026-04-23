@@ -240,10 +240,10 @@ function App() {
       return null;
     }
 
-    const panelWidth = 360;
+    const margin = 16;
+    const panelWidth = Math.min(520, Math.max(400, window.innerWidth - margin * 2));
     const panelHeight = 240;
     const gap = 18;
-    const margin = 16;
     const canPlaceRight = state.x + gap + panelWidth <= window.innerWidth - margin;
     const left = canPlaceRight
       ? state.x + gap
@@ -253,6 +253,7 @@ function App() {
     const arrowTop = Math.min(Math.max(state.y - top - 10, 18), panelHeight - 28);
 
     return {
+      width: panelWidth,
       left,
       top,
       side: canPlaceRight ? "right" : "left",
@@ -763,8 +764,9 @@ function App() {
       <Show when={hoverPreviewDisplay()}>
         {(preview) => (
         <div
-          class="pointer-events-none absolute z-40 w-[360px] overflow-hidden rounded-[24px] border border-white/12 bg-[radial-gradient(circle_at_top_left,rgba(129,168,255,0.18),transparent_36%),radial-gradient(circle_at_bottom_right,rgba(106,208,255,0.12),transparent_34%),linear-gradient(180deg,rgba(14,20,32,0.97),rgba(8,12,20,0.97))] shadow-[0_28px_70px_rgba(0,0,0,0.38),0_10px_24px_rgba(17,24,39,0.24)] backdrop-blur-2xl"
+          class="pointer-events-none absolute z-40 overflow-hidden rounded-[24px] border border-white/12 bg-[radial-gradient(circle_at_top_left,rgba(129,168,255,0.18),transparent_36%),radial-gradient(circle_at_bottom_right,rgba(106,208,255,0.12),transparent_34%),linear-gradient(180deg,rgba(14,20,32,0.97),rgba(8,12,20,0.97))] shadow-[0_28px_70px_rgba(0,0,0,0.38),0_10px_24px_rgba(17,24,39,0.24)] backdrop-blur-2xl"
           style={{
+            width: `${preview().width}px`,
             left: `${preview().left}px`,
             top: `${preview().top}px`,
           }}
