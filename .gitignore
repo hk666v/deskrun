@@ -23,6 +23,11 @@ pnpm-debug.log*
 Thumbs.db
 desktop.ini
 
+# Claude Code
+# settings.local.json holds per-machine permission grants. Project-level
+# config such as .claude/launch.json stays tracked.
+.claude/settings.local.json
+
 # Build caches
 node_modules/.vite/
 .vite/
