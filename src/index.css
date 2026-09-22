@@ -1,89 +1,233 @@
 @import "tailwindcss";
 
-:root {
-  color-scheme: dark;
-  font-family: "Segoe UI", "Microsoft YaHei UI", sans-serif;
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+/*
+ * DeskRun design tokens — "precision instrument".
+ *
+ * Three surface steps, two hairlines, four text levels, one signal color.
+ * Everything in src/ reads from these; do not reintroduce raw hex/opacity values.
+ */
+@theme {
+  /* Surfaces: 3 steps */
+  --color-canvas: #0a0c10;
+  --color-surface: #10141b;
+  --color-raised: #161b24;
+
+  /* Hairlines: 2 steps */
+  --color-line: rgb(255 255 255 / 0.07);
+  --color-line-strong: rgb(255 255 255 / 0.13);
+
+  /* Text: 4 levels */
+  --color-fg: rgb(255 255 255 / 0.93);
+  --color-fg-muted: rgb(255 255 255 / 0.62);
+  --color-fg-subtle: rgb(255 255 255 / 0.44);
+  --color-fg-faint: rgb(255 255 255 / 0.26);
+
+  /* Fills: 4 levels */
+  --color-fill: rgb(255 255 255 / 0.035);
+  --color-fill-strong: rgb(255 255 255 / 0.065);
+  --color-inset: rgb(0 0 0 / 0.28);
+  --color-scrim: rgb(4 6 10 / 0.55);
+
+  /* Signal: the only accent. Reserved for selection and the single primary action. */
+  --color-signal: #f0a63a;
+  --color-signal-soft: rgb(240 166 58 / 0.13);
+  --color-signal-line: rgb(240 166 58 / 0.4);
+
+  /* Danger: destructive actions and errors only */
+  --color-danger: #f4736f;
+  --color-danger-soft: rgb(244 115 111 / 0.12);
+
+  /* Windows-native families — no webfonts, so no memory cost */
+  --font-sans: "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", system-ui,
+    "Microsoft YaHei UI", sans-serif;
+  --font-mono: "Cascadia Mono", "Cascadia Code", Consolas, ui-monospace, monospace;
+
+  /* Type scale: 7 steps, each carrying its own line-height */
+  --text-micro: 10px;
+  --text-micro--line-height: 14px;
+  --text-meta: 11px;
+  --text-meta--line-height: 16px;
+  --text-data: 12px;
+  --text-data--line-height: 16px;
+  --text-label: 13px;
+  --text-label--line-height: 18px;
+  --text-body: 14px;
+  --text-body--line-height: 20px;
+  --text-title: 16px;
+  --text-title--line-height: 22px;
+  --text-display: 20px;
+  --text-display--line-height: 26px;
+
+  /* Radii: 3 steps, sharp */
+  --radius-sharp: 2px;
+  --radius-panel: 4px;
+  --radius-window: 8px;
+
+  --shadow-float: 0 0 0 1px rgb(255 255 255 / 0.06), 0 14px 34px -10px rgb(0 0 0 / 0.62),
+    0 2px 6px rgb(0 0 0 / 0.45);
+  --shadow-overlay: 0 20px 48px -16px rgb(0 0 0 / 0.68);
+
+  --ease-sharp: cubic-bezier(0.22, 1, 0.36, 1);
+
+  --animate-fade-in: fade-in 110ms ease-out;
+  --animate-pop-in: pop-in 130ms var(--ease-sharp);
+  --animate-slide-in: slide-in-right 150ms var(--ease-sharp);
 }
 
-* {
-  box-sizing: border-box;
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
-html,
-body,
-#root {
-  margin: 0;
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
-body {
-  background: transparent;
+@keyframes slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
-button,
-input,
-select {
-  font: inherit;
+/* Tailwind 4 has no --z-* theme namespace, so the layer ladder lives here. */
+@utility z-sticky {
+  z-index: 20;
+}
+@utility z-chrome {
+  z-index: 30;
+}
+@utility z-float {
+  z-index: 35;
+}
+@utility z-scrim {
+  z-index: 45;
+}
+@utility z-overlay {
+  z-index: 50;
+}
+@utility z-menu {
+  z-index: 60;
+}
+@utility z-toast {
+  z-index: 70;
 }
 
-.glass-panel {
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.06)),
-    rgba(5, 12, 20, 0.5);
-  backdrop-filter: blur(24px);
+@layer base {
+  :root {
+    color-scheme: dark;
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  html,
+  body,
+  #root {
+    margin: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  body {
+    background: transparent;
+    font-family: var(--font-sans);
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+    color: inherit;
+    letter-spacing: inherit;
+  }
+
+  :focus {
+    outline: none;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-signal);
+    outline-offset: 1px;
+  }
+
+  ::selection {
+    background: var(--color-signal-soft);
+  }
+
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: var(--color-line-strong);
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgb(255 255 255 / 0.22);
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
 }
 
-.field-input {
-  width: 100%;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.08);
-  color: white;
-  outline: none;
-  padding: 0.85rem 1rem;
-  transition: border-color 180ms ease, background-color 180ms ease;
-}
+@layer components {
+  .field-input {
+    width: 100%;
+    border: 1px solid var(--color-line-strong);
+    border-radius: var(--radius-sharp);
+    background: var(--color-inset);
+    color: var(--color-fg);
+    outline: none;
+    padding: 8px 10px;
+    font-size: var(--text-label);
+    line-height: 18px;
+    transition:
+      border-color 120ms ease,
+      background-color 120ms ease;
+  }
 
-.field-input:focus {
-  border-color: rgba(255, 255, 255, 0.3);
-  background: rgba(255, 255, 255, 0.12);
-}
+  .field-input::placeholder {
+    color: var(--color-fg-faint);
+  }
 
-.field-input::placeholder {
-  color: rgba(255, 255, 255, 0.34);
-}
+  .field-input:focus-visible {
+    outline: none;
+    border-color: var(--color-signal-line);
+    background: var(--color-canvas);
+  }
 
-.field-select {
-  appearance: none;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.04)),
-    rgba(16, 24, 39, 0.92);
-  color: rgba(255, 255, 255, 0.92);
-}
+  .field-select {
+    appearance: none;
+  }
 
-.field-select option {
-  background: #101827;
-  color: #f8fafc;
-}
-
-::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-
-::-webkit-scrollbar-thumb {
-  border: 2px solid transparent;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.15);
-  background-clip: padding-box;
-}
-
-::-webkit-scrollbar-track {
-  background: transparent;
+  .field-select option {
+    background: var(--color-raised);
+    color: var(--color-fg);
+  }
 }

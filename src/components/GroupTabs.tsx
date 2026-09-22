@@ -96,73 +96,68 @@ export function GroupTabs(props: GroupTabsProps) {
     });
   });
 
-  const systemTabClass = (active: boolean) =>
-    active
-      ? "border-white/10 bg-[#1C1F2A] text-white"
-      : "border-transparent bg-transparent text-white/46 hover:bg-[#1C1F2A] hover:text-white/82";
+  // Selection is carried by a signal underline so it stays distinct from the
+  // neutral hover wash used everywhere else.
+  const tabClass = (active: boolean) =>
+    `relative shrink-0 truncate rounded-sharp px-2 pt-1 pb-2 text-label transition-colors duration-100 ${
+      active ? "text-fg" : "text-fg-subtle hover:bg-fill hover:text-fg-muted"
+    }`;
+
+  const activeUnderline = (active: boolean) => (
+    <Show when={active}>
+      <div class="pointer-events-none absolute inset-x-0 bottom-0 h-[2px] bg-signal" />
+    </Show>
+  );
+
+  const systemTabs: Array<{ id: string | null; label: string }> = [
+    { id: null, label: "My Library" },
+    { id: "__favorites__", label: "Favorites" },
+    { id: "__recent__", label: "Recent" },
+    {
+      id: "__discovery__",
+      label:
+        props.discoveryCount > 0 ? `Discovery (${props.discoveryCount})` : "Discovery",
+    },
+  ];
 
   return (
-    <div class="flex min-w-0 items-center gap-3 rounded-[22px] border border-white/8 bg-[#161820] px-3 py-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+    <div class="flex min-w-0 items-center border-b border-line">
       <div class="min-w-0 flex-1 overflow-x-auto">
-        <div class="flex w-max items-center gap-2 pr-1">
-          <button
-            type="button"
-            onClick={() => props.onSelect(null)}
-            class={`max-w-[180px] shrink-0 truncate rounded-full border px-3.5 py-1.5 text-[13px] font-medium transition ${systemTabClass(
-              props.currentGroupId === null,
-            )}`}
-          >
-            My Library
-          </button>
-          <button
-            type="button"
-            onClick={() => props.onSelect("__favorites__")}
-            class={`max-w-[180px] shrink-0 truncate rounded-full border px-3.5 py-1.5 text-[13px] font-medium transition ${systemTabClass(
-              props.currentGroupId === "__favorites__",
-            )}`}
-          >
-            Favorites
-          </button>
-          <button
-            type="button"
-            onClick={() => props.onSelect("__recent__")}
-            class={`max-w-[180px] shrink-0 truncate rounded-full border px-3.5 py-1.5 text-[13px] font-medium transition ${systemTabClass(
-              props.currentGroupId === "__recent__",
-            )}`}
-          >
-            Recent
-          </button>
-          <button
-            type="button"
-            onClick={() => props.onSelect("__discovery__")}
-            class={`max-w-[180px] shrink-0 truncate rounded-full border px-3.5 py-1.5 text-[13px] font-medium transition ${systemTabClass(
-              props.currentGroupId === "__discovery__",
-            )}`}
-          >
-            {props.discoveryCount > 0 ? `Discovery (${props.discoveryCount})` : "Discovery"}
-          </button>
+        <div class="flex w-max items-center gap-1">
+          <For each={systemTabs}>
+            {(tab) => (
+              <button
+                type="button"
+                onClick={() => props.onSelect(tab.id)}
+                class={`max-w-[180px] ${tabClass(props.currentGroupId === tab.id)}`}
+              >
+                {tab.label}
+                {activeUnderline(props.currentGroupId === tab.id)}
+              </button>
+            )}
+          </For>
 
           <Show when={props.groups.length > 0}>
-            <div class="mx-1 h-5 w-px shrink-0 bg-white/10" />
+            <div class="mx-2 h-4 w-px shrink-0 bg-line" />
           </Show>
 
           <For each={props.groups}>
             {(group) => (
               <div class="relative shrink-0">
                 <div
-                  class={`pointer-events-none absolute bottom-1 top-1 w-[3px] rounded-full bg-sky-200/90 shadow-[0_0_0_1px_rgba(125,211,252,0.18),0_0_16px_rgba(56,189,248,0.28)] transition ${
+                  class={`pointer-events-none absolute top-0 bottom-0 w-[2px] bg-signal transition ${
                     dropTarget()?.groupId === group.id &&
                     dropTarget()?.placement === "before"
-                      ? "left-[-7px] opacity-100"
-                      : "left-[-11px] opacity-0"
+                      ? "left-[-5px] opacity-100"
+                      : "left-[-9px] opacity-0"
                   }`}
                 />
                 <div
-                  class={`pointer-events-none absolute bottom-1 top-1 w-[3px] rounded-full bg-sky-200/90 shadow-[0_0_0_1px_rgba(125,211,252,0.18),0_0_16px_rgba(56,189,248,0.28)] transition ${
+                  class={`pointer-events-none absolute top-0 bottom-0 w-[2px] bg-signal transition ${
                     dropTarget()?.groupId === group.id &&
                     dropTarget()?.placement === "after"
-                      ? "right-[-7px] opacity-100"
-                      : "right-[-11px] opacity-0"
+                      ? "right-[-5px] opacity-100"
+                      : "right-[-9px] opacity-0"
                   }`}
                 />
                 <button
@@ -189,18 +184,15 @@ export function GroupTabs(props: GroupTabsProps) {
                   ref={(element) => {
                     groupRefs.set(group.id, element);
                   }}
-                  class={`max-w-[180px] shrink-0 truncate rounded-full border px-3.5 py-1.5 text-[13px] font-medium select-none transition ${
-                    dragGroupId() === group.id && dragActive()
-                      ? "cursor-grabbing border-sky-200/24 bg-[#1C1F2A] text-white shadow-[0_10px_24px_rgba(56,189,248,0.16)]"
-                      : dropTarget()?.groupId === group.id
-                        ? "cursor-grab border-sky-200/22 bg-[#1C1F2A] text-white shadow-[0_10px_24px_rgba(56,189,248,0.1)]"
-                        : props.currentGroupId === group.id
-                          ? "cursor-grab border-white/10 bg-[#1C1F2A] text-white"
-                          : "cursor-grab border-transparent bg-transparent text-white/46 hover:bg-[#1C1F2A] hover:text-white/82"
+                  class={`max-w-[180px] select-none ${tabClass(
+                    props.currentGroupId === group.id,
+                  )} ${
+                    dragGroupId() === group.id && dragActive() ? "cursor-grabbing" : "cursor-grab"
                   }`}
                   title={group.name}
                 >
                   {group.name}
+                  {activeUnderline(props.currentGroupId === group.id)}
                 </button>
               </div>
             )}

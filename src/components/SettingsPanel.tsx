@@ -28,6 +28,10 @@ interface SettingsPanelProps {
   onDeleteGroup: (group: Group) => void;
 }
 
+const ROW = "border-b border-line py-2.5 last:border-b-0";
+const GHOST_BUTTON =
+  "rounded-sharp border border-line px-2 py-1 text-meta text-fg-muted transition-colors duration-100 hover:bg-fill hover:text-fg disabled:cursor-not-allowed disabled:opacity-45";
+
 export function SettingsPanel(props: SettingsPanelProps) {
   const [newGroupName, setNewGroupName] = createSignal("");
   const [editingGroupId, setEditingGroupId] = createSignal<string | null>(null);
@@ -52,38 +56,31 @@ export function SettingsPanel(props: SettingsPanelProps) {
 
   return (
     <Show when={props.open}>
-      <div class="absolute inset-0 z-30 flex justify-end bg-slate-950/22 backdrop-blur-sm">
-        <aside class="flex h-full w-[340px] min-h-0 flex-col overflow-hidden border-l border-white/12 bg-[linear-gradient(180deg,rgba(7,14,24,0.96),rgba(10,18,30,0.92))] px-5 py-6 shadow-[-18px_0_60px_rgba(0,0,0,0.24)]">
-          <div class="flex items-center justify-between">
-            <div>
-              <p class="text-[11px] uppercase tracking-[0.24em] text-white/38">
-                Preferences
-              </p>
-              <h2 class="mt-1 text-xl font-semibold text-white">DeskRun</h2>
-            </div>
+      <div class="fixed inset-0 z-scrim flex animate-fade-in justify-end rounded-window bg-scrim">
+        <aside class="flex h-full min-h-0 w-[340px] animate-slide-in flex-col overflow-hidden border-l border-line bg-raised shadow-overlay">
+          <div class="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
+            <h2 class="text-title font-semibold text-fg">Settings</h2>
             <button
               type="button"
               onClick={props.onClose}
-              class="rounded-2xl border border-white/10 bg-white/6 px-3 py-2 text-sm text-white/70 hover:bg-white/12"
+              class="rounded-sharp px-2 py-1 text-label text-fg-subtle transition-colors duration-100 hover:bg-fill hover:text-fg"
             >
               Done
             </button>
           </div>
 
-          <div class="mt-6 flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto pr-1">
-            <section class="flex flex-col gap-4 rounded-[26px] border border-white/12 bg-white/6 p-4">
-              <label class="flex flex-col gap-2">
-                <span class="text-[11px] uppercase tracking-[0.22em] text-white/36">
-                  Global Hotkey
-                </span>
-                <div class="flex items-center gap-2">
-                  <input
-                    value={props.settings.hotkey}
-                    onChange={(event) => props.onSetHotkey(event.currentTarget.value)}
-                    class="field-input"
-                  />
-                </div>
-              </label>
+          <div class="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto p-4">
+            <section class="flex flex-col">
+              <h3 class="mb-1 text-label font-medium text-fg">General</h3>
+
+              <div class={`flex flex-col gap-1 ${ROW}`}>
+                <span class="text-meta text-fg-subtle">Global hotkey</span>
+                <input
+                  value={props.settings.hotkey}
+                  onChange={(event) => props.onSetHotkey(event.currentTarget.value)}
+                  class="field-input"
+                />
+              </div>
 
               <ToggleRow
                 label="Launch at login"
@@ -96,40 +93,56 @@ export function SettingsPanel(props: SettingsPanelProps) {
                 onChange={props.onToggleCloseOnLaunch}
               />
 
-              <div class="rounded-[18px] border border-white/10 bg-black/10 px-4 py-4">
-                <div class="flex items-center justify-between gap-3">
-                  <div>
-                    <p class="text-sm text-white/75">Display mode</p>
-                    <p class="mt-1 text-xs text-white/42">
-                      Choose between the current card grid and a denser list layout.
-                    </p>
-                  </div>
-                  <div class="flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] p-1">
-                    <DisplayModeButton
-                      active={props.settings.displayMode === "grid"}
-                      onClick={() => props.onSetDisplayMode("grid")}
-                    >
-                      Grid
-                    </DisplayModeButton>
-                    <DisplayModeButton
-                      active={props.settings.displayMode === "list"}
-                      onClick={() => props.onSetDisplayMode("list")}
-                    >
-                      List
-                    </DisplayModeButton>
-                  </div>
+              <div class={`flex items-center justify-between gap-3 ${ROW}`}>
+                <div class="min-w-0">
+                  <p class="text-label text-fg-muted">Display mode</p>
+                  <p class="mt-0.5 text-meta text-fg-subtle">
+                    Card grid, or a denser list.
+                  </p>
+                </div>
+                <div class="flex shrink-0 items-center gap-0.5 rounded-sharp border border-line p-0.5">
+                  <DisplayModeButton
+                    active={props.settings.displayMode === "grid"}
+                    onClick={() => props.onSetDisplayMode("grid")}
+                  >
+                    Grid
+                  </DisplayModeButton>
+                  <DisplayModeButton
+                    active={props.settings.displayMode === "list"}
+                    onClick={() => props.onSetDisplayMode("list")}
+                  >
+                    List
+                  </DisplayModeButton>
                 </div>
               </div>
 
-              <div class="rounded-[18px] border border-white/10 bg-black/10 px-4 py-4">
+              <div class={`flex flex-col gap-2 ${ROW}`}>
                 <div class="flex items-center justify-between gap-3">
-                  <div>
-                    <p class="text-sm text-white/75">Window size</p>
-                    <p class="mt-1 text-xs text-white/42">
-                      {props.windowSizeLimits.minWidth}-{props.windowSizeLimits.maxWidth} px wide,{" "}
-                      {props.windowSizeLimits.minHeight}-{props.windowSizeLimits.maxHeight} px high
-                    </p>
-                  </div>
+                  <p class="text-label text-fg-muted">Window size</p>
+                  <p class="font-mono text-meta text-fg-subtle">
+                    {props.windowSizeLimits.minWidth}–{props.windowSizeLimits.maxWidth} ×{" "}
+                    {props.windowSizeLimits.minHeight}–{props.windowSizeLimits.maxHeight}
+                  </p>
+                </div>
+                <div class="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={props.windowSizeLimits.minWidth}
+                    max={props.windowSizeLimits.maxWidth}
+                    step="20"
+                    value={windowWidth()}
+                    onInput={(event) => setWindowWidth(event.currentTarget.value)}
+                    class="field-input min-w-0 flex-1"
+                  />
+                  <input
+                    type="number"
+                    min={props.windowSizeLimits.minHeight}
+                    max={props.windowSizeLimits.maxHeight}
+                    step="20"
+                    value={windowHeight()}
+                    onInput={(event) => setWindowHeight(event.currentTarget.value)}
+                    class="field-input min-w-0 flex-1"
+                  />
                   <button
                     type="button"
                     onClick={() => {
@@ -139,205 +152,155 @@ export function SettingsPanel(props: SettingsPanelProps) {
                         props.onSetWindowSize(width, height);
                       }
                     }}
-                    class="rounded-xl bg-white px-3 py-2 text-xs font-semibold text-slate-900"
+                    class="shrink-0 rounded-sharp bg-signal px-2 py-1 text-meta font-semibold text-canvas transition-opacity duration-100 hover:opacity-90"
                   >
                     Apply
                   </button>
                 </div>
-                <div class="mt-3 grid grid-cols-2 gap-3">
-                  <label class="flex flex-col gap-2 text-xs text-white/42">
-                    <span>Width</span>
-                    <input
-                      type="number"
-                      min={props.windowSizeLimits.minWidth}
-                      max={props.windowSizeLimits.maxWidth}
-                      step="20"
-                      value={windowWidth()}
-                      onInput={(event) => setWindowWidth(event.currentTarget.value)}
-                      class="field-input"
-                    />
-                  </label>
-                  <label class="flex flex-col gap-2 text-xs text-white/42">
-                    <span>Height</span>
-                    <input
-                      type="number"
-                      min={props.windowSizeLimits.minHeight}
-                      max={props.windowSizeLimits.maxHeight}
-                      step="20"
-                      value={windowHeight()}
-                      onInput={(event) => setWindowHeight(event.currentTarget.value)}
-                      class="field-input"
-                    />
-                  </label>
-                </div>
+              </div>
+            </section>
+
+            <section class="flex flex-col">
+              <div class="mb-1 flex items-center justify-between gap-3">
+                <h3 class="text-label font-medium text-fg">Config folder</h3>
+                <span
+                  class={`shrink-0 rounded-sharp border px-1.5 py-0.5 text-micro ${
+                    props.configDirectory.usingCustomPath
+                      ? "border-signal-line bg-signal-soft text-signal"
+                      : "border-line text-fg-faint"
+                  }`}
+                >
+                  {props.configDirectory.usingCustomPath ? "Custom" : "Default"}
+                </span>
               </div>
 
-              <div class="rounded-[18px] border border-white/10 bg-black/10 px-4 py-4">
-                <div class="flex items-start justify-between gap-3">
-                  <div class="min-w-0">
-                    <p class="text-sm text-white/75">Config folder</p>
-                    <p class="mt-1 text-xs leading-5 text-white/42">
-                      Choose where DeskRun stores `settings.json`, `items.json`, and `icons`.
-                    </p>
-                  </div>
-                  <span
-                    class={`shrink-0 rounded-full border px-3 py-1 text-[10px] uppercase tracking-[0.14em] ${
-                      props.configDirectory.usingCustomPath
-                        ? "border-sky-200/18 bg-sky-300/10 text-sky-100/70"
-                        : "border-white/10 bg-white/[0.04] text-white/42"
-                    }`}
-                  >
-                    {props.configDirectory.usingCustomPath ? "Custom" : "Default"}
-                  </span>
-                </div>
-
-                <div class="mt-3 rounded-[14px] border border-white/8 bg-white/[0.03] px-3 py-3">
-                  <div class="text-[10px] uppercase tracking-[0.18em] text-white/24">
-                    Current path
-                  </div>
-                  <div class="mt-2 break-all text-xs leading-5 text-white/64">
-                    {props.configDirectory.currentPath}
-                  </div>
-                </div>
-
-                <div class="mt-3 flex flex-wrap gap-2">
+              <div class="flex flex-col gap-2 border-b border-line py-2.5">
+                <p class="text-meta break-all text-fg-muted">
+                  {props.configDirectory.currentPath}
+                </p>
+                <div class="flex flex-wrap gap-1.5">
                   <button
                     type="button"
                     onClick={props.onChooseConfigDirectory}
-                    class="rounded-xl border border-white/12 bg-white/[0.05] px-3 py-2 text-xs font-medium text-white/78 transition hover:bg-white/[0.1]"
+                    class={GHOST_BUTTON}
                   >
-                    Choose Folder
+                    Choose folder
                   </button>
                   <button
                     type="button"
                     onClick={props.onOpenConfigDirectory}
-                    class="rounded-xl border border-white/12 bg-white/[0.05] px-3 py-2 text-xs font-medium text-white/78 transition hover:bg-white/[0.1]"
+                    class={GHOST_BUTTON}
                   >
-                    Open Folder
+                    Open folder
                   </button>
                   <button
                     type="button"
                     disabled={!props.configDirectory.usingCustomPath}
                     onClick={props.onResetConfigDirectory}
-                    class="rounded-xl border border-white/12 bg-white/[0.05] px-3 py-2 text-xs font-medium text-white/78 transition hover:bg-white/[0.1] disabled:cursor-not-allowed disabled:opacity-35"
+                    class={GHOST_BUTTON}
                   >
-                    Use Default
+                    Use default
                   </button>
                 </div>
+              </div>
 
-                <div class="mt-3 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={props.onExportConfig}
-                    class="rounded-xl border border-white/12 bg-white/[0.05] px-3 py-2 text-xs font-medium text-white/78 transition hover:bg-white/[0.1]"
-                  >
-                    Export Config
+              <div class="flex flex-col gap-2 border-b border-line py-2.5 last:border-b-0">
+                <p class="text-meta text-fg-subtle">
+                  Export writes a complete config folder. Import replaces the current
+                  settings, items, and cached icons.
+                </p>
+                <div class="flex flex-wrap gap-1.5">
+                  <button type="button" onClick={props.onExportConfig} class={GHOST_BUTTON}>
+                    Export config
                   </button>
-                  <button
-                    type="button"
-                    onClick={props.onImportConfig}
-                    class="rounded-xl border border-white/12 bg-white/[0.05] px-3 py-2 text-xs font-medium text-white/78 transition hover:bg-white/[0.1]"
-                  >
-                    Import Config
+                  <button type="button" onClick={props.onImportConfig} class={GHOST_BUTTON}>
+                    Import config
                   </button>
                 </div>
-
-                <div class="mt-3 text-[11px] leading-5 text-white/38">
-                  Export creates a full config folder. Import replaces the current local settings,
-                  items, and cached icons.
-                </div>
-
                 <Show when={props.configDirectory.usingCustomPath}>
-                  <div class="mt-3 break-all text-[11px] leading-5 text-white/38">
-                    Default path: {props.configDirectory.defaultPath}
-                  </div>
+                  <p class="text-meta break-all text-fg-faint">
+                    Default: {props.configDirectory.defaultPath}
+                  </p>
                 </Show>
               </div>
             </section>
 
-            <section class="flex flex-col rounded-[26px] border border-white/12 bg-white/6 p-4">
-              <div class="flex items-center justify-between">
-                <div>
-                  <p class="text-[11px] uppercase tracking-[0.22em] text-white/36">
-                    Groups
-                  </p>
-                  <h3 class="mt-1 text-base font-semibold text-white">
-                    Manage categories
-                  </h3>
-                </div>
-              </div>
+            <section class="flex flex-col">
+              <h3 class="mb-1 text-label font-medium text-fg">Groups</h3>
 
-              <div class="mt-4 flex gap-2">
-                <input
-                  value={newGroupName()}
-                  onInput={(event) => {
-                    setNewGroupName(event.currentTarget.value);
-                    setGroupError("");
-                  }}
-                  class="field-input"
-                  placeholder="New group name"
-                />
-                <button
-                  type="button"
-                  onClick={async () => {
-                    const value = newGroupName().trim();
-                    if (!value) {
-                      return;
-                    }
-
-                    if (groupNameExists(value)) {
-                      setGroupError("Group name already exists. Please choose another one.");
-                      return;
-                    }
-
-                    try {
-                      await props.onCreateGroup(value);
-                      setNewGroupName("");
+              <div class="flex flex-col gap-2 border-b border-line py-2.5">
+                <div class="flex items-center gap-2">
+                  <input
+                    value={newGroupName()}
+                    onInput={(event) => {
+                      setNewGroupName(event.currentTarget.value);
                       setGroupError("");
-                    } catch (error) {
-                      setGroupError(
-                        error instanceof Error
-                          ? error.message
-                          : "Unable to create group. Please try another name.",
-                      );
-                    }
-                  }}
-                  class="rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-slate-900"
-                >
-                  Add
-                </button>
+                    }}
+                    class="field-input min-w-0 flex-1"
+                    placeholder="New group name"
+                  />
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const value = newGroupName().trim();
+                      if (!value) {
+                        return;
+                      }
+
+                      if (groupNameExists(value)) {
+                        setGroupError("Group name already exists. Please choose another one.");
+                        return;
+                      }
+
+                      try {
+                        await props.onCreateGroup(value);
+                        setNewGroupName("");
+                        setGroupError("");
+                      } catch (error) {
+                        setGroupError(
+                          error instanceof Error
+                            ? error.message
+                            : "Unable to create group. Please try another name.",
+                        );
+                      }
+                    }}
+                    class="shrink-0 rounded-sharp bg-signal px-3 py-1.5 text-label font-semibold text-canvas transition-opacity duration-100 hover:opacity-90"
+                  >
+                    Add
+                  </button>
+                </div>
+
+                <Show when={groupError()}>
+                  <div class="rounded-sharp border border-danger-soft px-2 py-1.5 text-meta text-danger">
+                    {groupError()}
+                  </div>
+                </Show>
               </div>
 
-              <Show when={groupError()}>
-                <div class="mt-3 rounded-[14px] border border-amber-300/14 bg-amber-400/10 px-3 py-2 text-xs leading-5 text-amber-50/82">
-                  {groupError()}
-                </div>
-              </Show>
-
-              <div class="mt-4 flex flex-col gap-3">
+              <div class="flex flex-col">
                 <For each={props.groups}>
                   {(group) => (
-                    <div class="rounded-[20px] border border-white/10 bg-black/10 p-3">
+                    <div class="border-b border-line py-2 last:border-b-0">
                       <Show
                         when={editingGroupId() === group.id}
                         fallback={
                           <div class="flex items-center justify-between gap-3">
-                            <span class="truncate text-sm text-white">{group.name}</span>
-                            <div class="flex items-center gap-2">
+                            <span class="truncate text-label text-fg-muted">{group.name}</span>
+                            <div class="flex shrink-0 items-center gap-1.5">
                               <button
                                 type="button"
                                 onClick={() => {
                                   setEditingGroupId(group.id);
                                   setEditingGroupName(group.name);
                                 }}
-                                class="rounded-xl border border-white/10 px-3 py-2 text-xs text-white/70 hover:bg-white/10"
+                                class={GHOST_BUTTON}
                               >
                                 Rename
                               </button>
                               <button
                                 type="button"
                                 onClick={() => props.onDeleteGroup(group)}
-                                class="rounded-xl border border-rose-400/18 px-3 py-2 text-xs text-rose-100 hover:bg-rose-500/14"
+                                class="rounded-sharp border border-danger-soft px-2 py-1 text-meta text-danger transition-colors duration-100 hover:bg-danger-soft"
                               >
                                 Delete
                               </button>
@@ -352,7 +315,7 @@ export function SettingsPanel(props: SettingsPanelProps) {
                               setEditingGroupName(event.currentTarget.value);
                               setGroupError("");
                             }}
-                            class="field-input"
+                            class="field-input min-w-0 flex-1"
                           />
                           <button
                             type="button"
@@ -380,7 +343,7 @@ export function SettingsPanel(props: SettingsPanelProps) {
                                 );
                               }
                             }}
-                            class="rounded-xl bg-white px-3 py-2 text-xs font-semibold text-slate-900"
+                            class="shrink-0 rounded-sharp bg-signal px-2 py-1 text-meta font-semibold text-canvas transition-opacity duration-100 hover:opacity-90"
                           >
                             Save
                           </button>
@@ -406,13 +369,13 @@ interface ToggleRowProps {
 
 function ToggleRow(props: ToggleRowProps) {
   return (
-    <label class="flex items-center justify-between gap-3 rounded-[18px] border border-white/10 bg-black/10 px-4 py-3 text-sm text-white/75">
-      <span>{props.label}</span>
+    <label class={`flex items-center justify-between gap-3 ${ROW}`}>
+      <span class="text-label text-fg-muted">{props.label}</span>
       <input
         type="checkbox"
         checked={props.checked}
         onChange={(event) => props.onChange(event.currentTarget.checked)}
-        class="h-4 w-4 accent-white"
+        class="h-3.5 w-3.5 accent-signal"
       />
     </label>
   );
@@ -429,10 +392,10 @@ function DisplayModeButton(props: DisplayModeButtonProps) {
     <button
       type="button"
       onClick={props.onClick}
-      class={`rounded-full px-3 py-2 text-xs font-semibold transition ${
+      class={`rounded-sharp px-2 py-1 text-meta transition-colors duration-100 ${
         props.active
-          ? "bg-white text-slate-900 shadow-[0_6px_18px_rgba(255,255,255,0.12)]"
-          : "text-white/62 hover:bg-white/[0.07] hover:text-white/82"
+          ? "bg-signal font-semibold text-canvas"
+          : "text-fg-muted hover:bg-fill hover:text-fg"
       }`}
     >
       {props.children}

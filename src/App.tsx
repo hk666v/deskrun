@@ -117,6 +117,7 @@ function App() {
   const [query, setQuery] = createSignal("");
   const [currentGroupId, setCurrentGroupId] = createSignal<string | null>(null);
   const [selectedItemId, setSelectedItemId] = createSignal<string | null>(null);
+  const [gridColumns, setGridColumns] = createSignal(3);
   const [editorState, setEditorState] = createSignal<EditorState>(null);
   const [contextMenu, setContextMenu] = createSignal<ContextMenuState>(null);
   const [hoverPreview, setHoverPreview] = createSignal<HoverPreviewState>(null);
@@ -241,7 +242,9 @@ function App() {
     }
 
     const margin = 16;
-    const panelWidth = Math.min(520, Math.max(400, window.innerWidth - margin * 2));
+    // Proportional to the window so a 760px launcher does not get a preview
+    // covering most of itself.
+    const panelWidth = Math.min(420, Math.max(280, Math.round(window.innerWidth * 0.45)));
     const panelHeight = 240;
     const gap = 18;
     const canPlaceRight = state.x + gap + panelWidth <= window.innerWidth - margin;
@@ -545,7 +548,9 @@ function App() {
       return direction === "vertical" ? delta : 0;
     }
 
-    return direction === "vertical" ? delta * 4 : delta;
+    // Vertical moves must jump exactly one rendered row, which is however many
+    // columns the grid actually has at the current window width.
+    return direction === "vertical" ? delta * gridColumns() : delta;
   };
 
   const hideLauncher = async () => {
@@ -657,13 +662,10 @@ function App() {
 
   return (
     <LauncherShell dragging={draggingExternal()}>
-      <div class="flex h-full flex-col gap-3">
-        <div
-          class="flex items-center justify-between gap-4 rounded-[24px] px-1 py-0.5 select-none"
-        >
-          <h1 class="text-[24px] font-semibold tracking-[-0.03em] text-white">
-            DeskRun
-          </h1>
+      <div class="flex h-full flex-col gap-4">
+        {/* Height matches the drag strip in LauncherShell so the whole top band moves the window. */}
+        <div class="flex h-8 items-center px-1 select-none">
+          <h1 class="text-display font-semibold tracking-tight text-fg">DeskRun</h1>
         </div>
 
         <SearchBar
@@ -696,6 +698,9 @@ function App() {
               viewMode={settings().displayMode}
               activeItemId={selectedItemId()}
               sectioned={shouldSectionListItems()}
+              query={query()}
+              viewId={currentGroupId()}
+              onColumnsChange={setGridColumns}
               sortable={
                 !query() &&
                 currentGroupId() !== FAVORITES_VIEW_ID &&
@@ -743,18 +748,6 @@ function App() {
                   : current.filter((id) => id !== candidateId),
               );
             }}
-            onImportOne={async (candidate) => {
-              const matched = discoveryCandidates().find(
-                (entry) =>
-                  entry.target === candidate.target &&
-                  entry.kind === candidate.kind &&
-                  entry.name === candidate.name,
-              );
-              await importDiscoveryPayload(
-                [candidate],
-                matched ? [matched.id] : undefined,
-              );
-            }}
             onScan={runDiscoveryScan}
             onImportSelected={importSelectedDiscoveryItems}
           />
@@ -764,41 +757,27 @@ function App() {
       <Show when={hoverPreviewDisplay()}>
         {(preview) => (
         <div
-          class="pointer-events-none absolute z-40 overflow-hidden rounded-[24px] border border-white/12 bg-[radial-gradient(circle_at_top_left,rgba(129,168,255,0.18),transparent_36%),radial-gradient(circle_at_bottom_right,rgba(106,208,255,0.12),transparent_34%),linear-gradient(180deg,rgba(14,20,32,0.97),rgba(8,12,20,0.97))] shadow-[0_28px_70px_rgba(0,0,0,0.38),0_10px_24px_rgba(17,24,39,0.24)] backdrop-blur-2xl"
+          class="pointer-events-none fixed z-float animate-pop-in overflow-hidden rounded-panel border border-line-strong bg-raised shadow-overlay"
           style={{
             width: `${preview().width}px`,
             left: `${preview().left}px`,
             top: `${preview().top}px`,
           }}
         >
-          <div class="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.02)_24%,transparent_52%)]" />
-          <div class="absolute inset-px rounded-[23px] border border-white/[0.04]" />
-          <div
-            class="absolute h-4 w-4 rotate-45 border border-white/12 bg-[linear-gradient(180deg,rgba(24,34,52,0.98),rgba(10,16,27,0.98))] shadow-[0_8px_18px_rgba(0,0,0,0.2)]"
-            style={{
-              top: `${preview().arrowTop}px`,
-              left: preview().side === "right" ? "-8px" : undefined,
-              right: preview().side === "left" ? "-8px" : undefined,
-            }}
-          />
-          <div class="relative flex max-h-[240px] min-h-0 flex-col gap-3 overflow-y-auto p-4 pr-3">
+          <div class="relative flex max-h-[240px] min-h-0 flex-col gap-3 overflow-y-auto p-3">
             <Show when={preview().item.kind === "command"}>
-              <div class="min-w-0 rounded-[18px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.025))] px-3.5 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-                <div class="text-[10px] uppercase tracking-[0.18em] text-sky-100/34">
-                  CMD Preview
-                </div>
-                <div class="mt-2 whitespace-pre-wrap break-all font-mono text-[12px] leading-5 text-white/82">
+              <div class="min-w-0 border-l border-line pl-2">
+                <div class="text-micro text-fg-subtle">Command</div>
+                <div class="mt-1 font-mono text-data break-all whitespace-pre-wrap text-fg-muted">
                   {buildCommandPreview(preview().item)}
                 </div>
               </div>
             </Show>
 
             <Show when={preview().item.note?.trim()}>
-              <div class="min-w-0 rounded-[18px] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.045),rgba(255,255,255,0.02))] px-3.5 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
-                <div class="text-[10px] uppercase tracking-[0.18em] text-sky-100/34">
-                  Note
-                </div>
-                <div class="mt-2 whitespace-pre-wrap break-words text-[12px] leading-6 text-white/74">
+              <div class="min-w-0 border-l border-line pl-2">
+                <div class="text-micro text-fg-subtle">Note</div>
+                <div class="mt-1 text-label break-words whitespace-pre-wrap text-fg-muted">
                   {preview().item.note}
                 </div>
               </div>
@@ -1000,7 +979,7 @@ function App() {
       />
 
       <Show when={feedback()}>
-        <div class="pointer-events-none absolute bottom-5 right-5 z-40 rounded-full border border-white/10 bg-[linear-gradient(180deg,rgba(10,18,30,0.94),rgba(12,20,32,0.9))] px-4 py-2 text-sm text-white/72 shadow-[0_18px_42px_rgba(0,0,0,0.28)] backdrop-blur-xl">
+        <div class="pointer-events-none fixed right-4 bottom-4 z-toast animate-pop-in rounded-sharp border border-line bg-raised px-3 py-2 text-label text-fg-muted shadow-overlay">
           {feedback()}
         </div>
       </Show>

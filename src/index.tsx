@@ -1,4 +1,5 @@
 /* @refresh reload */
+import "./tauri-shim";
 import { render } from "solid-js/web";
 import App from "./App";
 import "./index.css";

@@ -4,17 +4,12 @@ import type { LaunchItem } from "../types";
 import { buildCommandPreview } from "../lib/command-preview";
 
 const FALLBACK_LABEL: Record<LaunchItem["kind"], string> = {
-  exe: "APP",
+  exe: "EXE",
   link: "LNK",
   folder: "DIR",
   url: "URL",
   command: "CMD",
 };
-
-interface ItemVisualTheme {
-  iconClass: string;
-  fallbackTextClass: string;
-}
 
 interface ItemCardProps {
   item: LaunchItem;
@@ -22,6 +17,8 @@ interface ItemCardProps {
   active: boolean;
   draggable: boolean;
   subdued?: boolean;
+  /** Set while an in-app reorder drag is in flight. */
+  dragState?: "dragging" | "over";
   onClick: () => void;
   onSelect: () => void;
   onPreviewHover: (x: number, y: number) => void;
@@ -76,17 +73,57 @@ export function ItemCard(props: ItemCardProps) {
     return drive ? `${drive}\\...\\${tail}` : `...\\${tail}`;
   };
 
-  const visualTheme = () => resolveItemVisualTheme(props.item);
-  const subduedClass = () => (props.subdued ? "opacity-55 hover:opacity-100 focus-visible:opacity-100" : "");
-  const launchCountLabel = () => `↑ ${props.item.launchCount}`;
-  const launchCountClass = () =>
-    props.item.launchCount > 0
-      ? "text-emerald-300/88 group-hover:text-emerald-200"
-      : "text-white/34 group-hover:text-white/42";
-  const launchTimeClass = () =>
-    props.item.launchCount > 0
-      ? "text-emerald-100/58 group-hover:text-emerald-100/72"
-      : "text-white/26 group-hover:text-white/34";
+  const stateClass = () => {
+    if (props.dragState === "dragging") {
+      return "opacity-40";
+    }
+    return props.subdued ? "opacity-55 hover:opacity-100 focus-visible:opacity-100" : "";
+  };
+
+  // Preview positioning rides on mousemove; selection is keyboard and focus only,
+  // so hovering never steals the keyboard cursor out from under the user.
+  const trackPreview = (event: MouseEvent) => {
+    if (hasPreviewDetails()) {
+      props.onPreviewHover(event.clientX, event.clientY);
+    }
+  };
+
+  const overlays = () => (
+    <>
+      <Show when={props.active}>
+        <div class="pointer-events-none absolute inset-y-0 left-0 w-[2px] bg-signal" />
+      </Show>
+      <Show when={props.dragState === "over"}>
+        <div class="pointer-events-none absolute inset-x-0 top-0 h-[2px] bg-signal" />
+      </Show>
+    </>
+  );
+
+  const iconTile = (size: "grid" | "list") => (
+    <div
+      class={`flex shrink-0 items-center justify-center overflow-hidden rounded-sharp border border-line bg-inset ${
+        size === "grid" ? "h-11 w-11" : "h-9 w-9 self-start"
+      }`}
+    >
+      <Show
+        when={iconSrc()}
+        fallback={
+          <span class="font-mono text-micro text-fg-subtle">
+            {FALLBACK_LABEL[props.item.kind]}
+          </span>
+        }
+      >
+        {(src) => (
+          <img
+            src={src()}
+            alt={props.item.name}
+            class={size === "grid" ? "h-7 w-7 object-contain" : "h-6 w-6 object-contain"}
+            onError={() => setIconLoadFailed(true)}
+          />
+        )}
+      </Show>
+    </div>
+  );
 
   return (
     <Show
@@ -95,17 +132,8 @@ export function ItemCard(props: ItemCardProps) {
         <button
           type="button"
           draggable={props.draggable}
-          onMouseEnter={(event) => {
-            props.onSelect();
-            if (hasPreviewDetails()) {
-              props.onPreviewHover(event.clientX, event.clientY);
-            }
-          }}
-          onMouseMove={(event) => {
-            if (hasPreviewDetails()) {
-              props.onPreviewHover(event.clientX, event.clientY);
-            }
-          }}
+          onMouseEnter={trackPreview}
+          onMouseMove={trackPreview}
           onMouseLeave={props.onPreviewLeave}
           onFocus={props.onSelect}
           onClick={props.onClick}
@@ -117,52 +145,32 @@ export function ItemCard(props: ItemCardProps) {
           onDragStart={props.onDragStart}
           onDragOver={props.onDragOver}
           onDrop={props.onDrop}
-          class={`group relative grid min-h-[178px] min-w-0 w-full grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-hidden rounded-[24px] border border-white/8 bg-[#161820] px-4 py-4 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition duration-200 ${
-            props.active ? "bg-[#1C1F2A]" : "hover:bg-[#1C1F2A]"
-          } ${subduedClass()}`}
+          class={`group relative grid min-h-[124px] w-full min-w-0 grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-hidden rounded-sharp border bg-raised px-3 py-3 text-left transition-colors duration-100 ${
+            props.active ? "border-signal-line" : "border-line hover:border-line-strong"
+          } ${stateClass()}`}
         >
-          <div class="grid min-w-0 grid-cols-[48px_minmax(0,1fr)] items-start gap-3">
-            <div class={`flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-[16px] border shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] ${visualTheme().iconClass}`}>
-              <Show
-                when={iconSrc()}
-                fallback={
-                  <span class={`text-[10px] font-semibold tracking-[0.2em] ${visualTheme().fallbackTextClass}`}>
-                    {FALLBACK_LABEL[props.item.kind]}
-                  </span>
-                }
-              >
-                {(src) => (
-                  <img
-                    src={src()}
-                    alt={props.item.name}
-                    class="h-8 w-8 object-contain"
-                    onError={() => setIconLoadFailed(true)}
-                  />
-                )}
-              </Show>
-            </div>
+          {overlays()}
 
-            <div class="flex min-h-12 min-w-0 flex-col items-start justify-center gap-2">
+          <div class="grid min-w-0 grid-cols-[44px_minmax(0,1fr)] items-start gap-3">
+            {iconTile("grid")}
+
+            <div class="flex min-h-11 min-w-0 flex-col items-start justify-center gap-2">
               <div class="min-w-0 self-stretch">
-                <div class="overflow-hidden text-[15px] font-semibold leading-5 text-white [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2] break-all">
+                <div class="overflow-hidden text-body font-medium text-fg transition-colors group-hover:text-white [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2] break-all">
                   {props.item.name}
                 </div>
               </div>
             </div>
           </div>
 
-          <div class="flex min-h-0 min-w-0 flex-col gap-2.5">
-            <div class="min-w-0 max-w-full overflow-hidden rounded-[16px] border border-white/8 bg-[#0F1117] px-3 py-2.5">
-              <div class="block min-w-0 max-w-full truncate font-mono text-[11px] leading-4 text-white/52">
-                {targetValue()}
-              </div>
+          <div class="flex min-h-0 min-w-0 flex-col gap-1.5 border-l border-line pl-2">
+            <div class="block min-w-0 max-w-full truncate font-mono text-data text-fg-subtle transition-colors group-hover:text-fg-muted">
+              {targetValue()}
             </div>
 
             <Show when={notePreview()}>
-              <div class="min-w-0 max-w-full overflow-hidden rounded-[16px] border border-white/8 bg-[#0F1117] px-3 py-2">
-                <div class="block min-w-0 max-w-full truncate text-[11px] leading-4 text-white/48">
-                  {notePreview()}
-                </div>
+              <div class="block min-w-0 max-w-full truncate text-meta text-fg-faint transition-colors group-hover:text-fg-subtle">
+                {notePreview()}
               </div>
             </Show>
           </div>
@@ -172,17 +180,8 @@ export function ItemCard(props: ItemCardProps) {
       <button
         type="button"
         draggable={props.draggable}
-        onMouseEnter={(event) => {
-          props.onSelect();
-          if (hasPreviewDetails()) {
-            props.onPreviewHover(event.clientX, event.clientY);
-          }
-        }}
-        onMouseMove={(event) => {
-          if (hasPreviewDetails()) {
-            props.onPreviewHover(event.clientX, event.clientY);
-          }
-        }}
+        onMouseEnter={trackPreview}
+        onMouseMove={trackPreview}
         onMouseLeave={props.onPreviewLeave}
         onFocus={props.onSelect}
         onClick={props.onClick}
@@ -194,59 +193,41 @@ export function ItemCard(props: ItemCardProps) {
         onDragStart={props.onDragStart}
         onDragOver={props.onDragOver}
         onDrop={props.onDrop}
-        class={`group relative grid w-full min-w-0 grid-cols-[42px_minmax(0,1fr)_72px] items-stretch gap-3 overflow-hidden rounded-[18px] border border-white/8 bg-[#161820] px-3.5 py-2.5 text-left shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition duration-200 ${
-          hasNote() ? "min-h-[92px]" : "min-h-[76px]"
-        } ${
-          props.active ? "bg-[#1C1F2A]" : "hover:bg-[#1C1F2A]"
-        } ${subduedClass()}`}
+        class={`group relative grid w-full min-w-0 grid-cols-[36px_minmax(0,1fr)_72px] items-stretch gap-3 border-b border-line px-2 py-2 text-left transition-colors duration-100 last:border-b-0 ${
+          hasNote() ? "min-h-[72px]" : "min-h-[56px]"
+        } ${props.active ? "bg-fill-strong" : "hover:bg-fill"} ${stateClass()}`}
       >
-        <Show when={props.item.isFavorite}>
-          <div class="absolute inset-y-3 left-0 w-[3px] rounded-r-full bg-amber-300/88" />
-        </Show>
+        {overlays()}
 
-        <div class={`mt-0.5 flex h-10 w-10 shrink-0 self-start items-center justify-center overflow-hidden rounded-[13px] border shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] ${visualTheme().iconClass}`}>
-          <Show
-            when={iconSrc()}
-            fallback={
-              <span class={`text-[9px] font-semibold tracking-[0.16em] ${visualTheme().fallbackTextClass}`}>
-                {FALLBACK_LABEL[props.item.kind]}
-              </span>
-            }
-          >
-            {(src) => (
-              <img
-                src={src()}
-                alt={props.item.name}
-                class="h-[22px] w-[22px] object-contain"
-                onError={() => setIconLoadFailed(true)}
-              />
-            )}
-          </Show>
-        </div>
+        {iconTile("list")}
 
-        <div class="min-w-0 self-stretch py-0.5">
+        <div class="min-w-0 self-stretch">
           <div
             class={`h-full min-w-0 ${
               hasNote()
-                ? "grid grid-rows-[auto_auto_auto] content-start gap-1"
-                : "grid grid-rows-[auto_auto] content-start gap-1"
+                ? "grid grid-rows-[auto_auto_auto] content-start gap-0.5"
+                : "grid grid-rows-[auto_auto] content-start gap-0.5"
             }`}
           >
             <div class="flex min-w-0 items-center gap-2">
-              <div class="truncate text-[14px] font-medium leading-5 text-white/96 transition group-hover:text-white">
+              <div class="truncate text-body font-medium text-fg transition-colors group-hover:text-white">
                 {props.item.name}
               </div>
               <Show when={props.item.isFavorite}>
-                <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-300" title="Pinned" aria-label="Pinned" />
+                <span
+                  class="h-1.5 w-1.5 shrink-0 rounded-full bg-signal"
+                  title="Pinned"
+                  aria-label="Pinned"
+                />
               </Show>
             </div>
 
-            <div class="truncate whitespace-nowrap font-mono text-[12px] leading-[18px] text-white/52 transition group-hover:text-white/62">
+            <div class="truncate font-mono text-data text-fg-subtle transition-colors group-hover:text-fg-muted">
               {listTargetValue()}
             </div>
 
             <Show when={hasNote()}>
-              <div class="truncate whitespace-nowrap text-[12px] leading-[18px] text-slate-200/44 transition group-hover:text-slate-100/56">
+              <div class="truncate text-meta text-fg-faint transition-colors group-hover:text-fg-subtle">
                 {notePreview()}
               </div>
             </Show>
@@ -254,20 +235,24 @@ export function ItemCard(props: ItemCardProps) {
         </div>
 
         <div
-          class={`flex h-full min-w-0 flex-col items-end py-0.5 text-right ${
-            hasNote() ? "justify-between" : "justify-center gap-1.5"
+          class={`flex h-full min-w-0 flex-col items-end text-right ${
+            hasNote() ? "justify-between" : "justify-center gap-1"
           }`}
         >
-          <div class={`text-[12px] font-medium leading-4 transition ${launchCountClass()}`}>
-            {launchCountLabel()}
+          <div class="font-mono text-meta text-fg-subtle transition-colors group-hover:text-fg-muted">
+            {launchCountLabel(props.item.launchCount)}
           </div>
-          <div class={`font-mono text-[11px] leading-4 transition ${launchTimeClass()}`}>
+          <div class="font-mono text-meta text-fg-faint transition-colors group-hover:text-fg-subtle">
             {formatLaunchTimestamp(props.item.lastLaunchedAt)}
           </div>
         </div>
       </button>
     </Show>
   );
+}
+
+function launchCountLabel(count: number) {
+  return count > 0 ? `↑ ${count}` : "—";
 }
 
 function formatLaunchTimestamp(value: string | null) {
@@ -285,39 +270,4 @@ function formatLaunchTimestamp(value: string | null) {
   const hours = `${date.getHours()}`.padStart(2, "0");
   const minutes = `${date.getMinutes()}`.padStart(2, "0");
   return `${month}/${day} ${hours}:${minutes}`;
-}
-
-function resolveItemVisualTheme(item: LaunchItem): ItemVisualTheme {
-  switch (item.kind) {
-    case "exe":
-      return {
-        iconClass: "border-[#1A417A] bg-[#0D1E35] text-[#2563EB]",
-        fallbackTextClass: "text-[#60A5FA]",
-      };
-    case "command":
-      return {
-        iconClass: "border-[#175631] bg-[#0B2415] text-[#16A34A]",
-        fallbackTextClass: "text-[#4ADE80]",
-      };
-    case "link":
-      return {
-        iconClass: "border-[#694013] bg-[#2A1A07] text-[#D97706]",
-        fallbackTextClass: "text-[#FBBF24]",
-      };
-    case "folder":
-      return {
-        iconClass: "border-[#715122] bg-[#31210C] text-[#D97706]",
-        fallbackTextClass: "text-[#FCD34D]",
-      };
-    case "url":
-      return {
-        iconClass: "border-[#5730A3] bg-[#1A1236] text-[#7C3AED]",
-        fallbackTextClass: "text-[#A78BFA]",
-      };
-    default:
-      return {
-        iconClass: "border-[#1A417A] bg-[#0D1E35] text-[#2563EB]",
-        fallbackTextClass: "text-[#60A5FA]",
-      };
-  }
 }

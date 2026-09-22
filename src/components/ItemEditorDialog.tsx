@@ -89,20 +89,27 @@ export function ItemEditorDialog(props: ItemEditorDialogProps) {
     }
   };
 
+  const iconModeButtonClass = (active: boolean) =>
+    `rounded-sharp border px-3 py-1.5 text-label transition-colors duration-100 ${
+      active
+        ? "border-signal-line bg-signal-soft text-signal"
+        : "border-line text-fg-muted hover:bg-fill hover:text-fg"
+    }`;
+
   return (
     <Show when={props.open}>
-      <div class="absolute inset-0 z-40 flex items-center justify-center bg-slate-950/28 backdrop-blur-sm">
-        <div class="w-[520px] rounded-[30px] border border-white/16 bg-[linear-gradient(180deg,rgba(10,18,30,0.94),rgba(12,22,35,0.88))] p-6 shadow-[0_28px_80px_rgba(4,10,20,0.38)]">
-          <div class="flex items-start justify-between gap-4">
-            <div>
-              <h2 class="text-xl font-semibold text-white">
+      <div class="fixed inset-0 z-scrim flex animate-fade-in items-center justify-center rounded-window bg-scrim">
+        <div class="flex max-h-[calc(100vh-32px)] w-[min(520px,calc(100vw-32px))] animate-pop-in flex-col overflow-hidden rounded-panel border border-line bg-raised shadow-overlay">
+          <div class="flex items-start justify-between gap-4 border-b border-line px-4 py-3">
+            <div class="min-w-0">
+              <h2 class="text-title font-semibold text-fg">
                 {props.mode === "create-url"
                   ? "Add URL"
                   : props.mode === "create-command"
                     ? "Add CMD Command"
                     : "Edit Launcher Item"}
               </h2>
-              <p class="mt-1 text-sm text-white/46">
+              <p class="mt-1 text-label text-fg-subtle">
                 {props.mode === "create-url"
                   ? "Create a website shortcut for quick launch."
                   : isCommandMode()
@@ -113,13 +120,15 @@ export function ItemEditorDialog(props: ItemEditorDialogProps) {
             <button
               type="button"
               onClick={props.onClose}
-              class="rounded-2xl border border-white/10 bg-white/6 px-3 py-2 text-sm text-white/70 transition hover:bg-white/12"
+              aria-label="Close"
+              title="Close"
+              class="shrink-0 rounded-sharp px-2 py-1 text-label text-fg-subtle transition-colors duration-100 hover:bg-fill hover:text-fg"
             >
-              Close
+              ✕
             </button>
           </div>
 
-          <div class="mt-6 flex flex-col gap-4">
+          <div class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
             <Field label="Name">
               <input
                 value={name()}
@@ -156,14 +165,14 @@ export function ItemEditorDialog(props: ItemEditorDialogProps) {
               <textarea
                 value={note()}
                 onInput={(event) => setNote(event.currentTarget.value)}
-                class="field-input min-h-[92px] resize-y py-3 leading-6"
+                class="field-input min-h-[80px] resize-y leading-6"
                 placeholder="Explain what this item does, what the parameters mean, or any usage tips."
               />
             </Field>
 
             <Show when={isCommandMode()}>
               <>
-                <Field label="Fixed Args">
+                <Field label="Fixed args">
                   <input
                     value={fixedArgs()}
                     onInput={(event) => setFixedArgs(event.currentTarget.value)}
@@ -172,19 +181,20 @@ export function ItemEditorDialog(props: ItemEditorDialogProps) {
                   />
                 </Field>
 
-                <Field label="Runtime Args">
+                <Field label="Runtime args">
                   <input
                     value={runtimeArgs()}
                     onInput={(event) => setRuntimeArgs(event.currentTarget.value)}
                     class="field-input"
                     placeholder="-u https://example.com -proxy http://127.0.0.1:8080"
                   />
-                  <p class="text-xs text-white/42">
-                    Saved runtime arguments are appended after the fixed args when this item launches.
+                  <p class="text-meta text-fg-subtle">
+                    Saved runtime arguments are appended after the fixed args when this
+                    item launches.
                   </p>
                 </Field>
 
-                <Field label="Working Directory">
+                <Field label="Working directory">
                   <input
                     value={workingDir()}
                     onInput={(event) => setWorkingDir(event.currentTarget.value)}
@@ -193,13 +203,13 @@ export function ItemEditorDialog(props: ItemEditorDialogProps) {
                   />
                 </Field>
 
-                <label class="flex items-center justify-between gap-3 rounded-[18px] border border-white/10 bg-black/10 px-4 py-3 text-sm text-white/75">
+                <label class="flex items-center justify-between gap-3 rounded-sharp border border-line px-3 py-2 text-label text-fg-muted">
                   <span>Keep CMD window open</span>
                   <input
                     type="checkbox"
                     checked={keepOpen()}
                     onChange={(event) => setKeepOpen(event.currentTarget.checked)}
-                    class="h-4 w-4 accent-white"
+                    class="h-3.5 w-3.5 accent-signal"
                   />
                 </label>
               </>
@@ -208,9 +218,7 @@ export function ItemEditorDialog(props: ItemEditorDialogProps) {
             <Field label="Group">
               <select
                 value={groupId() ?? ""}
-                onChange={(event) =>
-                  setGroupId(event.currentTarget.value || null)
-                }
+                onChange={(event) => setGroupId(event.currentTarget.value || null)}
                 class="field-input field-select"
               >
                 <option value="">Ungrouped</option>
@@ -221,7 +229,7 @@ export function ItemEditorDialog(props: ItemEditorDialogProps) {
             </Field>
 
             <Show when={props.mode === "edit" && props.item?.kind !== "command"}>
-              <div class="flex items-center gap-3 rounded-[22px] border border-white/10 bg-white/6 p-4">
+              <div class="flex flex-wrap items-center gap-2 rounded-sharp border border-line p-3">
                 <button
                   type="button"
                   onClick={() => {
@@ -229,27 +237,19 @@ export function ItemEditorDialog(props: ItemEditorDialogProps) {
                     setClearCustomIcon(true);
                     setCustomIconPath(undefined);
                   }}
-                  class={`rounded-2xl border px-4 py-2 text-sm transition ${
-                    iconMode() === "auto"
-                      ? "border-white/24 bg-white text-slate-900"
-                      : "border-white/10 text-white/65 hover:bg-white/10"
-                  }`}
+                  class={iconModeButtonClass(iconMode() === "auto")}
                 >
-                  Use Auto Icon
+                  Use auto icon
                 </button>
                 <button
                   type="button"
                   onClick={pickIcon}
-                  class={`rounded-2xl border px-4 py-2 text-sm transition ${
-                    iconMode() === "custom"
-                      ? "border-white/16 bg-white/12 text-white"
-                      : "border-white/10 text-white/65 hover:bg-white/10"
-                  }`}
+                  class={iconModeButtonClass(iconMode() === "custom")}
                 >
-                  Choose Custom Icon
+                  Choose custom icon
                 </button>
                 <Show when={iconMode() === "custom"}>
-                  <span class="truncate text-xs text-white/46">
+                  <span class="min-w-0 truncate font-mono text-meta text-fg-subtle">
                     {customIconPath()
                       ? customIconPath()
                       : props.item?.iconSource === "custom"
@@ -261,21 +261,21 @@ export function ItemEditorDialog(props: ItemEditorDialogProps) {
             </Show>
           </div>
 
-          <div class="mt-6 flex items-center justify-between">
+          <div class="flex items-center justify-between gap-3 border-t border-line px-4 py-3">
             <Show when={props.mode === "edit" && props.item && props.onDelete}>
               <button
                 type="button"
                 onClick={() => props.item && props.onDelete?.(props.item)}
-                class="rounded-2xl border border-rose-400/18 bg-rose-500/10 px-4 py-3 text-sm font-medium text-rose-100 transition hover:bg-rose-500/16"
+                class="rounded-sharp border border-danger-soft px-3 py-1.5 text-label text-danger transition-colors duration-100 hover:bg-danger-soft"
               >
-                Delete Item
+                Delete item
               </button>
             </Show>
-            <div class="ml-auto flex items-center gap-3">
+            <div class="ml-auto flex items-center gap-2">
               <button
                 type="button"
                 onClick={props.onClose}
-                class="rounded-2xl border border-white/10 px-4 py-3 text-sm text-white/65 transition hover:bg-white/8"
+                class="rounded-sharp border border-line px-3 py-1.5 text-label text-fg-muted transition-colors duration-100 hover:bg-fill hover:text-fg"
               >
                 Cancel
               </button>
@@ -300,7 +300,7 @@ export function ItemEditorDialog(props: ItemEditorDialogProps) {
                         : false,
                   })
                 }
-                class="rounded-2xl bg-white px-5 py-3 text-sm font-semibold text-slate-900 shadow-[0_12px_28px_rgba(255,255,255,0.18)]"
+                class="rounded-sharp bg-signal px-4 py-1.5 text-label font-semibold text-canvas transition-opacity duration-100 hover:opacity-90"
               >
                 Save
               </button>
@@ -319,10 +319,8 @@ interface FieldProps {
 
 function Field(props: FieldProps) {
   return (
-    <label class="flex flex-col gap-2 text-sm text-white/62">
-      <span class="text-[11px] uppercase tracking-[0.22em] text-white/36">
-        {props.label}
-      </span>
+    <label class="flex flex-col gap-1.5">
+      <span class="text-meta text-fg-subtle">{props.label}</span>
       {props.children}
     </label>
   );
