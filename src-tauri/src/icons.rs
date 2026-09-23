@@ -1,5 +1,6 @@
 use std::{
     fs,
+    io::Read,
     path::{Path, PathBuf},
 };
 
@@ -16,8 +17,8 @@ use windows::{
     core::PCWSTR,
     Win32::{
         Graphics::Gdi::{
-            CreateCompatibleDC, DeleteDC, DeleteObject, GetDIBits, GetObjectW, BITMAP,
-            BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, HGDIOBJ,
+            CreateCompatibleDC, DeleteDC, DeleteObject, GetDIBits, GetObjectW, BITMAP, BITMAPINFO,
+            BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, HBITMAP, HDC, HGDIOBJ,
         },
         UI::{
             Shell::{SHGetFileInfoW, SHFILEINFOW, SHGFI_ICON, SHGFI_LARGEICON},
@@ -26,9 +27,18 @@ use windows::{
     },
 };
 
+/// Icons larger than this are not real icons, and treating them as such only
+/// leads to enormous allocations.
+#[cfg(target_os = "windows")]
+const MAX_ICON_EDGE: i32 = 1024;
+
+const PNG_SIGNATURE: [u8; 8] = [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A];
+
 pub fn resolve_auto_icon(item: &LaunchItem, icons_dir: &Path) -> Result<Option<String>> {
     match item.kind {
-        LaunchItemKind::Exe | LaunchItemKind::Link => extract_file_icon(&item.target, &item.id, icons_dir),
+        LaunchItemKind::Exe | LaunchItemKind::Link => {
+            extract_file_icon(&item.target, &item.id, icons_dir)
+        }
         _ => Ok(None),
     }
 }
@@ -38,6 +48,10 @@ pub fn import_custom_icon(source_path: &str, item_id: &str, icons_dir: &Path) ->
     if !source.exists() {
         return Err(anyhow!("custom icon file does not exist"));
     }
+
+    // Drop any previous custom icon first: switching from `icon.png` to
+    // `icon.ico` would otherwise leave the old file behind forever.
+    remove_cached_icons(item_id, icons_dir);
 
     let extension = source
         .extension()
@@ -55,6 +69,23 @@ pub fn import_custom_icon(source_path: &str, item_id: &str, icons_dir: &Path) ->
     Ok(destination.to_string_lossy().to_string())
 }
 
+/// Removes every cached file belonging to an item. Called when the item is
+/// deleted or its icon is replaced, so `icons/` cannot grow without bound across
+/// target edits, icon swaps, and deletions.
+pub fn remove_cached_icons(item_id: &str, icons_dir: &Path) {
+    let Ok(entries) = fs::read_dir(icons_dir) else {
+        return;
+    };
+
+    let prefix = format!("{item_id}-");
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        if name.to_string_lossy().starts_with(&prefix) {
+            let _ = fs::remove_file(entry.path());
+        }
+    }
+}
+
 fn extract_file_icon(target: &str, item_id: &str, icons_dir: &Path) -> Result<Option<String>> {
     #[cfg(not(target_os = "windows"))]
     {
@@ -69,15 +100,17 @@ fn extract_file_icon(target: &str, item_id: &str, icons_dir: &Path) -> Result<Op
             return Ok(None);
         }
 
-        let file_name = format!("{}-{}.png", item_id, hash_path(&source));
+        let file_name = format!("{}-{}.png", item_id, cache_key(&source));
         let output_path = icons_dir.join(file_name);
-        if output_path.exists() && cached_icon_is_valid(&output_path) {
+        if cached_icon_is_valid(&output_path) {
             return Ok(Some(output_path.to_string_lossy().to_string()));
         }
 
         let _ = fs::remove_file(&output_path);
 
-        if save_icon_from_path(&source, &output_path).is_err() || !cached_icon_is_valid(&output_path) {
+        if save_icon_from_path(&source, &output_path).is_err()
+            || !cached_icon_is_valid(&output_path)
+        {
             let _ = fs::remove_file(&output_path);
             return Ok(None);
         }
@@ -86,18 +119,35 @@ fn extract_file_icon(target: &str, item_id: &str, icons_dir: &Path) -> Result<Op
     }
 }
 
-fn hash_path(path: &Path) -> String {
+/// Keys the cache on the source path *and* its size and modification time.
+/// Keying on the path alone meant a program that updates itself in place — same
+/// path, new icon — kept showing the old artwork forever.
+fn cache_key(source: &Path) -> String {
     let mut hasher = Sha256::new();
-    hasher.update(path.to_string_lossy().as_bytes());
-    let digest = hasher.finalize();
-    format!("{:x}", digest)[0..12].to_string()
+    hasher.update(source.to_string_lossy().as_bytes());
+
+    if let Ok(metadata) = fs::metadata(source) {
+        hasher.update(metadata.len().to_le_bytes());
+        if let Ok(modified) = metadata.modified() {
+            if let Ok(age) = modified.duration_since(std::time::UNIX_EPOCH) {
+                hasher.update(age.as_secs().to_le_bytes());
+            }
+        }
+    }
+
+    format!("{:x}", hasher.finalize())[0..12].to_string()
 }
 
+/// A non-empty file that still starts with the PNG signature. Decoding the whole
+/// image just to answer "is this a usable PNG" cost a full decode on every
+/// create and update.
 fn cached_icon_is_valid(path: &Path) -> bool {
-    fs::metadata(path)
-        .map(|metadata| metadata.is_file() && metadata.len() > 0)
-        .unwrap_or(false)
-        && image::open(path).is_ok()
+    let Ok(mut file) = fs::File::open(path) else {
+        return false;
+    };
+
+    let mut signature = [0u8; 8];
+    file.read_exact(&mut signature).is_ok() && signature == PNG_SIGNATURE
 }
 
 #[cfg(target_os = "windows")]
@@ -131,10 +181,63 @@ fn save_icon_from_path(source: &Path, output_path: &Path) -> Result<()> {
     save_result
 }
 
+/// Owns the two bitmaps `GetIconInfo` hands back. There are several early
+/// returns below — including `?` on a Windows call — and hand-written cleanup
+/// missed one of them the moment the code grew a new branch.
+#[cfg(target_os = "windows")]
+struct IconBitmaps {
+    color: HBITMAP,
+    mask: HBITMAP,
+}
+
+#[cfg(target_os = "windows")]
+impl Drop for IconBitmaps {
+    fn drop(&mut self) {
+        unsafe {
+            let _ = DeleteObject(self.color.into());
+            let _ = DeleteObject(self.mask.into());
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+struct DeviceContext(HDC);
+
+#[cfg(target_os = "windows")]
+impl Drop for DeviceContext {
+    fn drop(&mut self) {
+        unsafe {
+            let _ = DeleteDC(self.0);
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn bitmap_info(width: i32, height: i32) -> BITMAPINFO {
+    BITMAPINFO {
+        bmiHeader: BITMAPINFOHEADER {
+            biSize: size_of::<BITMAPINFOHEADER>() as u32,
+            biWidth: width,
+            // Negative height asks for a top-down bitmap, matching the order we
+            // write the pixels back out in.
+            biHeight: -height,
+            biPlanes: 1,
+            biBitCount: 32,
+            biCompression: BI_RGB.0,
+            ..Default::default()
+        },
+        ..Default::default()
+    }
+}
+
 #[cfg(target_os = "windows")]
 fn save_hicon_to_png(icon: HICON, output_path: &Path) -> Result<()> {
     let mut icon_info = ICONINFO::default();
     unsafe { GetIconInfo(icon, &mut icon_info)? };
+    let _bitmaps = IconBitmaps {
+        color: icon_info.hbmColor,
+        mask: icon_info.hbmMask,
+    };
 
     let mut bitmap = BITMAP::default();
     let object_size = unsafe {
@@ -145,57 +248,95 @@ fn save_hicon_to_png(icon: HICON, output_path: &Path) -> Result<()> {
         )
     };
     if object_size == 0 {
-        unsafe {
-            let _ = DeleteObject(icon_info.hbmColor.into());
-            let _ = DeleteObject(icon_info.hbmMask.into());
-        }
         return Err(anyhow!("failed to inspect icon bitmap"));
     }
 
     let width = bitmap.bmWidth;
     let height = bitmap.bmHeight;
-    let mut pixels = vec![0u8; (width * height * 4) as usize];
-    let mut bitmap_info = BITMAPINFO {
-        bmiHeader: BITMAPINFOHEADER {
-            biSize: size_of::<BITMAPINFOHEADER>() as u32,
-            biWidth: width,
-            biHeight: -height,
-            biPlanes: 1,
-            biBitCount: 32,
-            biCompression: BI_RGB.0,
-            ..Default::default()
-        },
-        ..Default::default()
-    };
 
-    let device_context = unsafe { CreateCompatibleDC(None) };
+    // A malformed or top-down bitmap can report a negative height, and the
+    // pixel-buffer arithmetic below used to be unchecked i32 multiplication that
+    // aborted the process on overflow — while the launcher's state lock was held.
+    if !(1..=MAX_ICON_EDGE).contains(&width) || !(1..=MAX_ICON_EDGE).contains(&height) {
+        return Err(anyhow!(
+            "icon bitmap has an unusable size: {width}x{height}"
+        ));
+    }
+
+    // Both edges are bounded above, so this cannot overflow.
+    let pixel_bytes = width as usize * height as usize * 4;
+    let mut pixels = vec![0u8; pixel_bytes];
+    let device_context = DeviceContext(unsafe { CreateCompatibleDC(None) });
+
     let scanlines = unsafe {
         GetDIBits(
-            device_context,
+            device_context.0,
             icon_info.hbmColor,
             0,
             height as u32,
             Some(pixels.as_mut_ptr() as *mut _),
-            &mut bitmap_info,
+            &mut bitmap_info(width, height),
             DIB_RGB_COLORS,
         )
     };
-
-    unsafe {
-        let _ = DeleteDC(device_context);
-        let _ = DeleteObject(icon_info.hbmColor.into());
-        let _ = DeleteObject(icon_info.hbmMask.into());
-    }
-
     if scanlines == 0 {
         return Err(anyhow!("failed to read icon bitmap data"));
     }
 
-    for chunk in pixels.chunks_exact_mut(4) {
-        chunk.swap(0, 2);
+    for pixel in pixels.as_chunks_mut::<4>().0 {
+        pixel.swap(0, 2);
     }
 
-    image::save_buffer(output_path, &pixels, width as u32, height as u32, ColorType::Rgba8)
-        .with_context(|| format!("failed to save icon to {}", output_path.display()))?;
+    // 1bpp and 16-colour icons come back from GetDIBits with an empty alpha
+    // channel, so every pixel lands fully transparent and the icon renders as a
+    // hole. When that happens, rebuild alpha from the AND mask instead.
+    if pixels.as_chunks::<4>().0.iter().all(|pixel| pixel[3] == 0) {
+        apply_mask_alpha(
+            device_context.0,
+            icon_info.hbmMask,
+            width,
+            height,
+            &mut pixels,
+        );
+    }
+
+    image::save_buffer(
+        output_path,
+        &pixels,
+        width as u32,
+        height as u32,
+        ColorType::Rgba8,
+    )
+    .with_context(|| format!("failed to save icon to {}", output_path.display()))?;
     Ok(())
+}
+
+/// Reconstructs an alpha channel from a monochrome AND mask, where a set bit
+/// means "transparent".
+#[cfg(target_os = "windows")]
+fn apply_mask_alpha(dc: HDC, mask: HBITMAP, width: i32, height: i32, pixels: &mut [u8]) {
+    let mut mask_pixels = vec![0u8; width as usize * height as usize * 4];
+    let scanlines = unsafe {
+        GetDIBits(
+            dc,
+            mask,
+            0,
+            height as u32,
+            Some(mask_pixels.as_mut_ptr() as *mut _),
+            &mut bitmap_info(width, height),
+            DIB_RGB_COLORS,
+        )
+    };
+    if scanlines == 0 {
+        return;
+    }
+
+    for (pixel, mask_pixel) in pixels
+        .as_chunks_mut::<4>()
+        .0
+        .iter_mut()
+        .zip(mask_pixels.as_chunks::<4>().0)
+    {
+        pixel[3] = if mask_pixel[0] == 0 { 255 } else { 0 };
+    }
 }

@@ -7,7 +7,9 @@ interface ItemContextMenuProps {
   x: number;
   y: number;
   onLaunch: (item: LaunchItem) => void;
+  onLaunchAsAdmin: (item: LaunchItem) => void;
   onToggleFavorite: (item: LaunchItem) => void;
+  onDuplicate: (item: LaunchItem) => void;
   onCopyCommand: (item: LaunchItem) => void;
   onEdit: (item: LaunchItem) => void;
   onDelete: (item: LaunchItem) => void;
@@ -48,6 +50,8 @@ export function ItemContextMenu(props: ItemContextMenuProps) {
           <div class="fixed inset-0 z-scrim" onMouseDown={props.onClose} />
           <div
             ref={menuRef}
+            role="menu"
+            aria-label="Item actions"
             class="fixed z-menu min-w-[180px] animate-pop-in overflow-hidden rounded-panel border border-line-strong bg-raised p-1 shadow-overlay"
             style={{
               left: `${menuPosition().left}px`,
@@ -55,12 +59,20 @@ export function ItemContextMenu(props: ItemContextMenuProps) {
             }}
           >
             <MenuButton onClick={() => props.onLaunch(item())}>Launch</MenuButton>
+            {/* Elevating a browser is meaningless, so it is not offered. */}
+            <Show when={item().kind !== "url"}>
+              <MenuButton onClick={() => props.onLaunchAsAdmin(item())}>
+                Run as administrator
+              </MenuButton>
+            </Show>
+
+            <MenuDivider />
             <MenuButton onClick={() => props.onToggleFavorite(item())}>
               {item().isFavorite ? "Unpin" : "Pin"}
             </MenuButton>
+            <MenuButton onClick={() => props.onDuplicate(item())}>Duplicate</MenuButton>
 
             <Show when={item().kind === "command"}>
-              <MenuDivider />
               <MenuButton onClick={() => props.onCopyCommand(item())}>
                 Copy Command
               </MenuButton>
@@ -94,6 +106,7 @@ function MenuButton(props: MenuButtonProps) {
   return (
     <button
       type="button"
+      role="menuitem"
       onClick={props.onClick}
       class={`flex w-full items-center rounded-sharp px-2 py-1.5 text-left text-label transition-colors duration-100 ${
         props.danger

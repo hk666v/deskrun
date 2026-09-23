@@ -1,5 +1,17 @@
-import { getCurrentWindow, type ResizeDirection } from "@tauri-apps/api/window";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { createSignal, onCleanup, onMount, type JSX } from "solid-js";
+
+/// Matches the directions `startResizeDragging` accepts. The package declares
+/// this union but does not export it, so it is repeated here.
+type ResizeDirection =
+  | "East"
+  | "North"
+  | "NorthEast"
+  | "NorthWest"
+  | "South"
+  | "SouthEast"
+  | "SouthWest"
+  | "West";
 
 interface LauncherShellProps {
   children: JSX.Element;
@@ -47,9 +59,6 @@ export function LauncherShell(props: LauncherShellProps) {
   return (
     <main
       tabIndex={0}
-      onMouseDownCapture={(event) => {
-        event.currentTarget.focus();
-      }}
       class={`relative h-screen w-screen overflow-hidden bg-transparent text-fg outline-none ${
         flush() ? "p-0" : "p-1.5"
       }`}
@@ -84,44 +93,50 @@ export function LauncherShell(props: LauncherShellProps) {
         )}
       </div>
 
+      {/* The visible panel is inset by the gutter, so a hit area measured from
+          the window edge only overlaps a couple of pixels of what the user can
+          actually see. These bands are deliberately generous — 16px on the
+          edges, 20px at the corners — which still stops well short of any
+          interactive content, since the panel has 20px of padding inside a 6px
+          gutter. */}
       <ResizeHandle
         direction="North"
-        class="top-0 right-3 left-3 h-2 cursor-n-resize"
+        class="top-0 right-5 left-5 h-4 cursor-n-resize"
         onResize={startResize}
       />
       <ResizeHandle
         direction="South"
-        class="right-3 bottom-0 left-3 h-2 cursor-s-resize"
+        class="right-5 bottom-0 left-5 h-4 cursor-s-resize"
         onResize={startResize}
       />
       <ResizeHandle
         direction="West"
-        class="top-3 bottom-3 left-0 w-2 cursor-w-resize"
+        class="top-5 bottom-5 left-0 w-4 cursor-w-resize"
         onResize={startResize}
       />
       <ResizeHandle
         direction="East"
-        class="top-3 right-0 bottom-3 w-2 cursor-e-resize"
+        class="top-5 right-0 bottom-5 w-4 cursor-e-resize"
         onResize={startResize}
       />
       <ResizeHandle
         direction="NorthWest"
-        class="top-0 left-0 h-3 w-3 cursor-nw-resize"
+        class="top-0 left-0 h-5 w-5 cursor-nw-resize"
         onResize={startResize}
       />
       <ResizeHandle
         direction="NorthEast"
-        class="top-0 right-0 h-3 w-3 cursor-ne-resize"
+        class="top-0 right-0 h-5 w-5 cursor-ne-resize"
         onResize={startResize}
       />
       <ResizeHandle
         direction="SouthWest"
-        class="bottom-0 left-0 h-3 w-3 cursor-sw-resize"
+        class="bottom-0 left-0 h-5 w-5 cursor-sw-resize"
         onResize={startResize}
       />
       <ResizeHandle
         direction="SouthEast"
-        class="right-0 bottom-0 h-3 w-3 cursor-se-resize"
+        class="right-0 bottom-0 h-5 w-5 cursor-se-resize"
         onResize={startResize}
       />
     </main>
@@ -137,11 +152,15 @@ interface ResizeHandleProps {
 function ResizeHandle(props: ResizeHandleProps) {
   return (
     <div
-      class={`absolute z-chrome select-none ${props.class}`}
+      class={`group absolute z-chrome select-none ${props.class}`}
       onMouseDown={(event) => {
         event.preventDefault();
         void props.onResize(props.direction);
       }}
-    />
+    >
+      {/* Without this the resize edges are invisible, so the only way to learn
+          the window can be dragged is to guess. */}
+      <div class="pointer-events-none absolute inset-0 bg-signal-soft opacity-0 transition-opacity duration-100 group-hover:opacity-100" />
+    </div>
   );
 }

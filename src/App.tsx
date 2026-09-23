@@ -7,6 +7,7 @@ import {
   createItem,
   deleteGroup,
   deleteItem,
+  duplicateItem,
   exportConfig,
   getBootstrapData,
   hideMainWindow,
@@ -14,6 +15,7 @@ import {
   importDiscoveryCandidates,
   importPaths,
   launchItem,
+  launchItemAsAdmin,
   openConfigDirectory,
   renameGroup,
   reorderGroups,
@@ -25,7 +27,6 @@ import {
   setHotkey,
   setLaunchOnStartup,
   syncWindowSize,
-  setWindowSize,
   toggleFavorite,
   updateItem,
 } from "./lib/commands";
@@ -39,6 +40,7 @@ import { SearchBar } from "./components/SearchBar";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { copyText } from "./lib/clipboard";
 import { buildCommandPreview } from "./lib/command-preview";
+import { buildQueryActions, type QueryAction } from "./lib/query-actions";
 import {
   buildSearchIndexEntry,
   calculateSearchScore,
@@ -51,7 +53,6 @@ import type {
   Group,
   LaunchItem,
   Settings,
-  WindowSizeLimits,
 } from "./types";
 
 type EditorState =
@@ -82,13 +83,6 @@ const DEFAULT_SETTINGS: Settings = {
   windowHeight: 560,
 };
 
-const DEFAULT_WINDOW_SIZE_LIMITS: WindowSizeLimits = {
-  minWidth: 760,
-  minHeight: 560,
-  maxWidth: 1400,
-  maxHeight: 960,
-};
-
 const DEFAULT_CONFIG_DIRECTORY: ConfigDirectoryInfo = {
   currentPath: "",
   defaultPath: "",
@@ -104,6 +98,18 @@ const DEFAULT_DISCOVERY_SCAN_OPTIONS: DiscoveryScanOptions = {
   registry: true,
 };
 
+/// Turns anything a rejected `invoke` can throw into a line the user can read.
+/// Tauri rejects with the plain string the Rust side returned.
+function describeError(error: unknown) {
+  if (typeof error === "string") {
+    return error;
+  }
+  if (error instanceof Error) {
+    return error.message;
+  }
+  return String(error);
+}
+
 function App() {
   const currentWindow = getCurrentWindow();
   const [items, setItems] = createSignal<LaunchItem[]>([]);
@@ -111,9 +117,6 @@ function App() {
   const [settings, setSettings] = createSignal<Settings>(DEFAULT_SETTINGS);
   const [configDirectory, setConfigDirectoryInfo] =
     createSignal<ConfigDirectoryInfo>(DEFAULT_CONFIG_DIRECTORY);
-  const [windowSizeLimits, setWindowSizeLimits] = createSignal<WindowSizeLimits>(
-    DEFAULT_WINDOW_SIZE_LIMITS,
-  );
   const [query, setQuery] = createSignal("");
   const [currentGroupId, setCurrentGroupId] = createSignal<string | null>(null);
   const [selectedItemId, setSelectedItemId] = createSignal<string | null>(null);
@@ -125,6 +128,14 @@ function App() {
   const [dialogBusy, setDialogBusy] = createSignal(false);
   const [draggingExternal, setDraggingExternal] = createSignal(false);
   const [feedback, setFeedback] = createSignal("");
+  const [startupWarning, setStartupWarning] = createSignal("");
+  /// Destructive actions queue here so they can be confirmed in the app rather
+  /// than through a native dialog, which would blur the window and hide it.
+  const [pendingAction, setPendingAction] = createSignal<{
+    message: string;
+    confirm: string;
+    action: () => Promise<void>;
+  } | null>(null);
   const [discoveryBusy, setDiscoveryBusy] = createSignal(false);
   const [discoveryError, setDiscoveryError] = createSignal("");
   const [discoveryCandidates, setDiscoveryCandidates] = createSignal<DiscoveryCandidate[]>([]);
@@ -137,6 +148,7 @@ function App() {
   let hoverPreviewTimer: number | undefined;
   let pendingHoverPreview: HoverPreviewState = null;
   let searchInput!: HTMLInputElement;
+  let feedbackTimer: number | undefined;
 
   const searchIndex = createMemo(() =>
     items().map((item) => ({
@@ -196,6 +208,14 @@ function App() {
       .map(({ item }) => item);
   });
 
+  /// Offered only when nothing matched, so a real item always wins over a guess
+  /// at what the query might mean.
+  const queryActions = createMemo(() =>
+    visibleItems().length === 0 && currentGroupId() !== DISCOVERY_VIEW_ID
+      ? buildQueryActions(query())
+      : [],
+  );
+
   const shouldSectionListItems = createMemo(
     () =>
       settings().displayMode === "list" &&
@@ -226,13 +246,27 @@ function App() {
     setGroups(data.groups);
     setSettings(data.settings);
     setConfigDirectoryInfo(data.configDirectory);
-    setWindowSizeLimits(data.windowSizeLimits);
+    setStartupWarning(data.startupWarning ?? "");
     syncSelection(data.items);
   };
 
+  /// Every settings command answers with the full bootstrap payload, but only
+  /// these fields can have changed.
+  const applySettingsResponse = (data: Awaited<ReturnType<typeof getBootstrapData>>) => {
+    setSettings(data.settings);
+    setConfigDirectoryInfo(data.configDirectory);
+    setStartupWarning(data.startupWarning ?? "");
+  };
+
   const refresh = async () => {
-    const data = await getBootstrapData();
-    applyBootstrapData(data);
+    try {
+      const data = await getBootstrapData();
+      applyBootstrapData(data);
+    } catch (error) {
+      // Nothing downstream can work without this data, so say so instead of
+      // leaving the user staring at a permanently empty window.
+      setFeedback(`Could not load your launcher data: ${describeError(error)}`);
+    }
   };
 
   const hoverPreviewPosition = createMemo(() => {
@@ -279,10 +313,31 @@ function App() {
 
   const notify = (message: string) => {
     setFeedback(message);
-    window.clearTimeout((notify as unknown as { timer?: number }).timer);
-    (notify as unknown as { timer?: number }).timer = window.setTimeout(() => {
-      setFeedback("");
-    }, 2200);
+    window.clearTimeout(feedbackTimer);
+    feedbackTimer = window.setTimeout(() => setFeedback(""), 2200);
+  };
+
+  /// Runs a command and surfaces a rejection. Several of these calls used to
+  /// fail completely silently — saving an item with an empty command field did
+  /// nothing at all, with no error and no change to the dialog.
+  const run = async (action: () => Promise<void>, failureMessage: string) => {
+    try {
+      await action();
+    } catch (error) {
+      notify(`${failureMessage}: ${describeError(error)}`);
+    }
+  };
+
+  /// Runs an action that opens a native window or hands a folder to the shell.
+  /// The WebView loses focus while that is on screen, and the focus handler
+  /// would otherwise hide the launcher out from under the user.
+  const withNativeDialog = async <T,>(action: () => Promise<T>): Promise<T> => {
+    setDialogBusy(true);
+    try {
+      return await action();
+    } finally {
+      setDialogBusy(false);
+    }
   };
 
   const runDiscoveryScan = async () => {
@@ -291,9 +346,16 @@ function App() {
     try {
       const candidates = await scanDiscoveryCandidates(discoveryScanOptions());
       setDiscoveryCandidates(candidates);
+      // Only what Windows itself presents as a program is pre-selected. Every
+      // registry entry is either declared by the vendor or inferred from a
+      // folder listing, and an inferred one can just as easily be a helper tool
+      // as the app — pre-selecting those is how a curated launcher becomes three
+      // hundred rows nobody asked for.
       setSelectedDiscoveryIds(
         candidates
-          .filter((candidate) => !candidate.alreadyExists)
+          .filter(
+            (candidate) => !candidate.alreadyExists && candidate.confidence === "high",
+          )
           .map((candidate) => candidate.id),
       );
       if (currentGroupId() !== DISCOVERY_VIEW_ID) {
@@ -329,6 +391,8 @@ function App() {
               selected.has(candidate.id) ? { ...candidate, alreadyExists: true } : candidate,
             ),
           );
+          // The boxes would otherwise stay ticked on rows that are now disabled.
+          setSelectedDiscoveryIds([]);
         }
         notify(`Imported ${created.length} discovered app(s)`);
       } else {
@@ -373,39 +437,37 @@ function App() {
   };
 
   const handlePickApp = async () => {
-    setDialogBusy(true);
-    try {
-      const result = await open({
-        multiple: true,
-        filters: [{ name: "Apps", extensions: ["exe", "lnk"] }],
-      });
+    await run(async () => {
+      const result = await withNativeDialog(() =>
+        open({
+          multiple: true,
+          filters: [{ name: "Apps", extensions: ["exe", "lnk"] }],
+        }),
+      );
 
       if (Array.isArray(result)) {
         await importSelectedPaths(result);
       } else if (typeof result === "string") {
         await importSelectedPaths([result]);
       }
-    } finally {
-      setDialogBusy(false);
-    }
+    }, "Could not add those items");
   };
 
   const handlePickFolder = async () => {
-    setDialogBusy(true);
-    try {
-      const result = await open({
-        directory: true,
-        multiple: true,
-      });
+    await run(async () => {
+      const result = await withNativeDialog(() =>
+        open({
+          directory: true,
+          multiple: true,
+        }),
+      );
 
       if (Array.isArray(result)) {
         await importSelectedPaths(result);
       } else if (typeof result === "string") {
         await importSelectedPaths([result]);
       }
-    } finally {
-      setDialogBusy(false);
-    }
+    }, "Could not add that folder");
   };
 
   const performLaunch = async (item: LaunchItem) => {
@@ -449,20 +511,52 @@ function App() {
     try {
       await performLaunch(item);
     } catch (error) {
-      const message =
-        error instanceof Error && error.message
-          ? error.message
-          : "Launch failed";
-      notify(`Launch failed: ${message}`);
+      notify(`Launch failed: ${describeError(error)}`);
     }
   };
 
-  const handleDelete = async (item: LaunchItem) => {
+  /// Runs one of the actions offered when nothing matched the query.
+  const runQueryAction = async (action: QueryAction) => {
+    clearHoverPreview();
+    await run(async () => {
+      await action.run();
+      notify(action.done);
+    }, "Could not complete that");
+  };
+
+  /// Enter means "do the obvious thing": launch the highlighted item, or fall
+  /// back to the first offered action when nothing matched.
+  const hasConfirmation = () =>
+    visibleItems().some((entry) => entry.id === selectedItemId()) ||
+    queryActions().length > 0;
+
+  const confirmSelection = async () => {
+    const item = visibleItems().find((entry) => entry.id === selectedItemId());
+    if (item) {
+      await handleLaunch(item);
+      return;
+    }
+
+    const action = queryActions()[0];
+    if (action) {
+      await runQueryAction(action);
+    }
+  };
+
+  const handleDelete = (item: LaunchItem) => {
     setContextMenu(null);
     clearHoverPreview();
-    await deleteItem(item.id);
-    setItems((current) => current.filter((entry) => entry.id !== item.id));
-    notify("Launcher item removed");
+    // Confirmed in-app rather than through a native dialog, which would take
+    // focus off the webview and make the launcher hide itself.
+    setPendingAction({
+      message: `Delete “${item.name}”? This cannot be undone.`,
+      confirm: "Delete",
+      action: async () => {
+        await deleteItem(item.id);
+        setItems((current) => current.filter((entry) => entry.id !== item.id));
+        notify("Launcher item removed");
+      },
+    });
   };
 
   const handleCopyCommand = async (item: LaunchItem) => {
@@ -479,11 +573,51 @@ function App() {
   const handleToggleFavorite = async (item: LaunchItem) => {
     setContextMenu(null);
     clearHoverPreview();
-    const updated = await toggleFavorite(item.id, !item.isFavorite);
-    setItems((current) =>
-      current.map((entry) => (entry.id === updated.id ? updated : entry)),
-    );
-    notify(updated.isFavorite ? "Pinned" : "Unpinned");
+    await run(async () => {
+      const updated = await toggleFavorite(item.id, !item.isFavorite);
+      setItems((current) =>
+        current.map((entry) => (entry.id === updated.id ? updated : entry)),
+      );
+      notify(updated.isFavorite ? "Pinned" : "Unpinned");
+    }, "Could not update the pin");
+  };
+
+  /// Elevates for this one run regardless of the item's own setting, so a UAC
+  /// prompt appears even for something normally launched unelevated.
+  const handleLaunchAsAdmin = async (item: LaunchItem) => {
+    setContextMenu(null);
+    clearHoverPreview();
+    await run(async () => {
+      const launched = await launchItemAsAdmin(item.id);
+      setItems((current) =>
+        current.map((entry) => (entry.id === launched.id ? launched : entry)),
+      );
+      notify(`Ran ${item.name} as administrator`);
+    }, "Could not run that as administrator");
+  };
+
+  const handleDuplicate = async (item: LaunchItem) => {
+    setContextMenu(null);
+    clearHoverPreview();
+    await run(async () => {
+      const copy = await duplicateItem(item.id);
+      setItems((current) => [...current, copy]);
+      notify(`Duplicated as “${copy.name}”`);
+    }, "Could not duplicate that item");
+  };
+
+  /// Reports whether the group was created so the tab strip's inline editor can
+  /// stay open when the name is rejected.
+  const handleCreateGroup = async (name: string): Promise<boolean> => {
+    try {
+      const group = await createGroup(name);
+      setGroups((current) => [...current, group]);
+      notify(`Group “${group.name}” created`);
+      return true;
+    } catch (error) {
+      notify(`Could not create the group: ${describeError(error)}`);
+      return false;
+    }
   };
 
   const handleReorder = async (fromId: string, toId: string) => {
@@ -562,10 +696,63 @@ function App() {
   };
 
   const handleAppKeyDown = async (event: KeyboardEvent) => {
+    // An in-flight IME composition owns Enter. For a Chinese user that key
+    // commits a candidate, and treating it as "launch" fired off whatever the
+    // grid happened to have selected.
+    if (event.isComposing || event.keyCode === 229) {
+      return;
+    }
+
+    const target = event.target as HTMLElement | null;
+
+    // An inline editor owns its own Enter and Escape. Without this, pressing
+    // Escape to cancel a group name would hide the entire launcher instead.
+    if (target?.closest("[data-inline-editor]")) {
+      return;
+    }
+
     if (event.key === "Escape" || event.code === "Escape") {
+      // Escape unwinds one layer at a time, and the launcher only hides once
+      // there is nothing left to close. It used to clear every overlay and hide
+      // the window in one press, silently discarding unsaved edits.
       event.preventDefault();
-      event.stopPropagation();
-      await hideLauncher();
+      if (contextMenu()) {
+        setContextMenu(null);
+      } else if (editorState()) {
+        setEditorState(null);
+      } else if (settingsOpen()) {
+        setSettingsOpen(false);
+      } else {
+        await hideLauncher();
+      }
+      return;
+    }
+
+    // Enter in the search box means "launch the highlighted result", or the
+    // first offered action when nothing matched.
+    if (target === searchInput && event.key === "Enter") {
+      if (hasConfirmation()) {
+        event.preventDefault();
+        await confirmSelection();
+      }
+      return;
+    }
+
+    // Everything below belongs to the launcher surface, so stand down while an
+    // overlay is open: the dialog, drawer, or menu owns the keyboard.
+    if (editorState() || settingsOpen() || contextMenu()) {
+      return;
+    }
+
+    // Text fields keep their own keys — arrows move the caret, and the number
+    // and select controls in Settings need their native behaviour.
+    if (target?.closest("input, textarea, select, [contenteditable='true']")) {
+      return;
+    }
+
+    // A focused button activates natively on Enter and Space. Intercepting it
+    // meant Enter on "Add" or "Save" launched an unrelated item instead.
+    if (target?.closest("button")) {
       return;
     }
 
@@ -582,75 +769,112 @@ function App() {
       event.preventDefault();
       moveSelection(selectionStep("vertical", -1));
     } else if (event.key === "Enter") {
-      const item = visibleItems().find((entry) => entry.id === selectedItemId());
-      if (item) {
+      if (hasConfirmation()) {
         event.preventDefault();
-        await handleLaunch(item);
+        await confirmSelection();
       }
     }
   };
 
+  // Put the caret back in the search box whenever the last overlay closes, so
+  // the user can carry on typing instead of clicking back into it. Focus used
+  // to land on `body`, meaning the next keystroke went nowhere.
+  createEffect(() => {
+    const overlayOpen = Boolean(editorState() || settingsOpen() || contextMenu());
+    if (!overlayOpen) {
+      searchInput?.focus();
+    }
+  });
+
   onMount(async () => {
-    await refresh();
     let resizeSyncTimer: number | undefined;
     let syncingResize = false;
+    const unlisteners: Array<() => void> = [];
 
-    const unlistenFocus = await currentWindow.onFocusChanged(async ({ payload }) => {
-      if (!payload && !dialogBusy()) {
-        await currentWindow.hide();
+    // One listener failing to register must not stop the app from loading its
+    // data, so each registration stands alone. Awaiting them before `refresh()`
+    // keeps the cold-start ordering: the window can be summoned the instant it
+    // exists, and a listener attached afterwards would miss that request.
+    const register = async (setup: () => Promise<() => void>) => {
+      try {
+        unlisteners.push(await setup());
+      } catch (error) {
+        console.warn("deskrun: could not register a window listener", error);
       }
-    });
+    };
 
-    const unlistenDragDrop = await currentWindow.onDragDropEvent(async (event) => {
-      if (event.payload.type === "over") {
-        setDraggingExternal(true);
-      } else if (event.payload.type === "drop") {
-        setDraggingExternal(false);
-        await importSelectedPaths(event.payload.paths);
-      } else {
-        setDraggingExternal(false);
-      }
-    });
-
-    const unlistenFocusSearch = await listen("deskrun://focus-search", () => {
-      searchInput?.focus();
-      searchInput?.select();
-    });
-
-    const unlistenResized = await currentWindow.onResized(async () => {
-      if (syncingResize) {
-        return;
-      }
-
-      window.clearTimeout(resizeSyncTimer);
-      resizeSyncTimer = window.setTimeout(async () => {
-        syncingResize = true;
-        try {
-          const [size, scaleFactor] = await Promise.all([
-            currentWindow.innerSize(),
-            currentWindow.scaleFactor(),
-          ]);
-          const width = Math.round(size.width / scaleFactor);
-          const height = Math.round(size.height / scaleFactor);
-          const data = await syncWindowSize(width, height);
-          setSettings(data.settings);
-          setWindowSizeLimits(data.windowSizeLimits);
-        } finally {
-          window.setTimeout(() => {
-            syncingResize = false;
-          }, 0);
+    await register(() =>
+      currentWindow.onFocusChanged(async ({ payload }) => {
+        if (!payload && !dialogBusy()) {
+          await currentWindow.hide();
         }
-      }, 140);
-    });
+      }),
+    );
+
+    await register(() =>
+      currentWindow.onDragDropEvent(async (event) => {
+        if (event.payload.type === "over") {
+          setDraggingExternal(true);
+        } else if (event.payload.type === "drop") {
+          setDraggingExternal(false);
+          const { paths } = event.payload;
+          await run(
+            () => importSelectedPaths(paths),
+            "Could not import those files",
+          );
+        } else {
+          setDraggingExternal(false);
+        }
+      }),
+    );
+
+    await register(() =>
+      listen("deskrun://focus-search", () => {
+        searchInput?.focus();
+        searchInput?.select();
+      }),
+    );
+
+    await register(() =>
+      currentWindow.onResized(async () => {
+        if (syncingResize) {
+          return;
+        }
+
+        window.clearTimeout(resizeSyncTimer);
+        resizeSyncTimer = window.setTimeout(async () => {
+          syncingResize = true;
+          try {
+            const [size, scaleFactor] = await Promise.all([
+              currentWindow.innerSize(),
+              currentWindow.scaleFactor(),
+            ]);
+            const width = Math.round(size.width / scaleFactor);
+            const height = Math.round(size.height / scaleFactor);
+            setSettings(await syncWindowSize(width, height));
+          } catch (error) {
+            // Not worth a toast on every drag frame; the next resize retries.
+            console.warn("deskrun: could not record the window size", error);
+          } finally {
+            window.setTimeout(() => {
+              syncingResize = false;
+            }, 0);
+          }
+        }, 140);
+      }),
+    );
 
     document.addEventListener("keydown", handleAppKeyDown, true);
 
+    await refresh();
+
+    // Start with the caret in the search box so the first keystroke lands
+    // somewhere instead of being swallowed by the shell.
+    searchInput?.focus();
+
     onCleanup(() => {
       clearHoverPreview();
-      unlistenFocus();
-      unlistenDragDrop();
-      unlistenFocusSearch();
-      unlistenResized();
+      unlisteners.forEach((unlisten) => unlisten());
       window.clearTimeout(resizeSyncTimer);
       document.removeEventListener("keydown", handleAppKeyDown, true);
     });
@@ -667,6 +891,24 @@ function App() {
         <div class="flex h-8 items-center px-1 select-none">
           <h1 class="text-display font-semibold tracking-tight text-fg">DeskRun</h1>
         </div>
+
+        {/* Startup problems such as "the hotkey was taken" are not transient, so
+            they live here rather than in the two-second toast. */}
+        <Show when={startupWarning()}>
+          <div
+            role="status"
+            class="flex items-start gap-3 rounded-sharp border border-danger-soft px-3 py-2"
+          >
+            <p class="min-w-0 flex-1 text-label text-danger">{startupWarning()}</p>
+            <button
+              type="button"
+              onClick={() => setStartupWarning("")}
+              class="shrink-0 rounded-sharp px-2 py-0.5 text-meta text-fg-subtle transition-colors duration-100 hover:bg-fill hover:text-fg"
+            >
+              Dismiss
+            </button>
+          </div>
+        </Show>
 
         <SearchBar
           query={query()}
@@ -688,6 +930,7 @@ function App() {
           discoveryCount={discoveryCandidates().filter((candidate) => !candidate.alreadyExists).length}
           onSelect={setCurrentGroupId}
           onReorderGroups={handleReorderGroups}
+          onCreateGroup={handleCreateGroup}
         />
 
         <Show
@@ -700,6 +943,8 @@ function App() {
               sectioned={shouldSectionListItems()}
               query={query()}
               viewId={currentGroupId()}
+              queryActions={queryActions()}
+              onRunQueryAction={runQueryAction}
               onColumnsChange={setGridColumns}
               sortable={
                 !query() &&
@@ -793,7 +1038,9 @@ function App() {
         x={contextMenu()?.x ?? 0}
         y={contextMenu()?.y ?? 0}
         onLaunch={handleLaunch}
+        onLaunchAsAdmin={handleLaunchAsAdmin}
         onToggleFavorite={handleToggleFavorite}
+        onDuplicate={handleDuplicate}
         onCopyCommand={handleCopyCommand}
         onEdit={(item) => {
           setContextMenu(null);
@@ -837,6 +1084,7 @@ function App() {
               runtimeArgs: payload.runtimeArgs,
               workingDir: payload.workingDir,
               keepOpen: payload.keepOpen,
+              runAsAdmin: payload.runAsAdmin,
               groupId: payload.groupId,
             });
             setItems((current) => [...current, created]);
@@ -852,6 +1100,7 @@ function App() {
               runtimeArgs: payload.runtimeArgs,
               workingDir: payload.workingDir,
               keepOpen: payload.keepOpen,
+              runAsAdmin: payload.runAsAdmin,
               groupId: payload.groupId,
               customIconPath: payload.customIconPath,
               clearCustomIcon: payload.clearCustomIcon,
@@ -869,93 +1118,82 @@ function App() {
         open={settingsOpen()}
         settings={settings()}
         configDirectory={configDirectory()}
-        windowSizeLimits={windowSizeLimits()}
         groups={groups()}
         onClose={() => setSettingsOpen(false)}
-        onSetHotkey={async (value) => {
-          const data = await setHotkey(value);
-          setSettings(data.settings);
-          setWindowSizeLimits(data.windowSizeLimits);
-          notify("Hotkey updated");
-        }}
-        onToggleStartup={async (value) => {
-          const data = await setLaunchOnStartup(value);
-          setSettings(data.settings);
-          setWindowSizeLimits(data.windowSizeLimits);
-          notify(value ? "Launch at login enabled" : "Launch at login disabled");
-        }}
-        onToggleCloseOnLaunch={async (value) => {
-          const data = await setCloseOnLaunch(value);
-          setSettings(data.settings);
-          setWindowSizeLimits(data.windowSizeLimits);
-          notify(value ? "Hide after launch enabled" : "Hide after launch disabled");
-        }}
-        onSetDisplayMode={async (value) => {
-          const data = await setDisplayMode(value);
-          setSettings(data.settings);
-          setWindowSizeLimits(data.windowSizeLimits);
-          notify(value === "list" ? "List view enabled" : "Grid view enabled");
-        }}
-        onSetWindowSize={async (width, height) => {
-          const data = await setWindowSize(width, height);
-          setSettings(data.settings);
-          setConfigDirectoryInfo(data.configDirectory);
-          setWindowSizeLimits(data.windowSizeLimits);
-          notify(
-            `Window size updated to ${data.settings.windowWidth} x ${data.settings.windowHeight}`,
-          );
-        }}
-        onChooseConfigDirectory={async () => {
-          const result = await open({
-            directory: true,
-            multiple: false,
-          });
-          if (typeof result !== "string") {
-            return;
-          }
+        onSetHotkey={(value) =>
+          run(async () => {
+            applySettingsResponse(await setHotkey(value));
+            notify("Hotkey updated");
+          }, "Could not register that hotkey")
+        }
+        onToggleStartup={(value) =>
+          run(async () => {
+            applySettingsResponse(await setLaunchOnStartup(value));
+            notify(value ? "Launch at login enabled" : "Launch at login disabled");
+          }, "Could not change the login item")
+        }
+        onToggleCloseOnLaunch={(value) =>
+          run(async () => {
+            applySettingsResponse(await setCloseOnLaunch(value));
+            notify(value ? "Hide after launch enabled" : "Hide after launch disabled");
+          }, "Could not change that setting")
+        }
+        onSetDisplayMode={(value) =>
+          run(async () => {
+            applySettingsResponse(await setDisplayMode(value));
+            notify(value === "list" ? "List view enabled" : "Grid view enabled");
+          }, "Could not switch the view")
+        }
+        onChooseConfigDirectory={() =>
+          run(async () => {
+            const result = await withNativeDialog(() =>
+              open({ directory: true, multiple: false }),
+            );
+            if (typeof result !== "string") {
+              return;
+            }
 
-          const data = await setConfigDirectory(result);
-          setSettings(data.settings);
-          setConfigDirectoryInfo(data.configDirectory);
-          setWindowSizeLimits(data.windowSizeLimits);
-          notify("Config folder updated");
-        }}
-        onOpenConfigDirectory={async () => {
-          await openConfigDirectory();
-          notify("Config folder opened");
-        }}
-        onResetConfigDirectory={async () => {
-          const data = await setConfigDirectory(null);
-          setSettings(data.settings);
-          setConfigDirectoryInfo(data.configDirectory);
-          setWindowSizeLimits(data.windowSizeLimits);
-          notify("Config folder reset to default");
-        }}
-        onExportConfig={async () => {
-          const result = await open({
-            directory: true,
-            multiple: false,
-          });
-          if (typeof result !== "string") {
-            return;
-          }
+            applySettingsResponse(await setConfigDirectory(result));
+            notify("Config folder updated");
+          }, "Could not change the config folder")
+        }
+        onOpenConfigDirectory={() =>
+          run(async () => {
+            await withNativeDialog(() => openConfigDirectory());
+            notify("Config folder opened");
+          }, "Could not open the config folder")
+        }
+        onResetConfigDirectory={() =>
+          run(async () => {
+            applySettingsResponse(await setConfigDirectory(null));
+            notify("Config folder reset to default");
+          }, "Could not reset the config folder")
+        }
+        onExportConfig={() =>
+          run(async () => {
+            const result = await withNativeDialog(() =>
+              open({ directory: true, multiple: false }),
+            );
+            if (typeof result !== "string") {
+              return;
+            }
 
-          const exportedPath = await exportConfig(result);
-          notify(`Config exported to ${exportedPath}`);
-        }}
-        onImportConfig={async () => {
-          const result = await open({
-            directory: true,
-            multiple: false,
-          });
-          if (typeof result !== "string") {
-            return;
-          }
+            notify(`Config exported to ${await exportConfig(result)}`);
+          }, "Could not export the config")
+        }
+        onImportConfig={() =>
+          run(async () => {
+            const result = await withNativeDialog(() =>
+              open({ directory: true, multiple: false }),
+            );
+            if (typeof result !== "string") {
+              return;
+            }
 
-          const data = await importConfig(result);
-          applyBootstrapData(data);
-          notify("Config imported");
-        }}
+            applyBootstrapData(await importConfig(result));
+            notify("Config imported");
+          }, "Could not import the config")
+        }
         onCreateGroup={async (name) => {
           const group = await createGroup(name);
           setGroups((current) => [...current, group]);
@@ -964,22 +1202,66 @@ function App() {
           const nextGroups = await renameGroup(group.id, name);
           setGroups(nextGroups);
         }}
-        onDeleteGroup={async (group) => {
-          const nextGroups = await deleteGroup(group.id);
-          setGroups(nextGroups);
-          setItems((current) =>
-            current.map((item) =>
-              item.groupId === group.id ? { ...item, groupId: null } : item,
-            ),
-          );
-          if (currentGroupId() === group.id) {
-            setCurrentGroupId(null);
-          }
+        onDeleteGroup={(group) => {
+          // Deleting a group also ungroups everything in it, which is a much
+          // bigger change than the button suggests, so say how many items are
+          // affected and let the user back out.
+          const affected = items().filter((item) => item.groupId === group.id).length;
+          setPendingAction({
+            message:
+              affected > 0
+                ? `Delete the group “${group.name}”? ${affected} item(s) will move to Ungrouped.`
+                : `Delete the group “${group.name}”?`,
+            confirm: "Delete group",
+            action: async () => {
+              const nextGroups = await deleteGroup(group.id);
+              setGroups(nextGroups);
+              setItems((current) =>
+                current.map((item) =>
+                  item.groupId === group.id ? { ...item, groupId: null } : item,
+                ),
+              );
+              if (currentGroupId() === group.id) {
+                setCurrentGroupId(null);
+              }
+              notify("Group removed");
+            },
+          });
         }}
       />
 
+      <Show when={pendingAction()}>
+        {(pending) => (
+          <div class="fixed inset-x-0 bottom-0 z-toast flex animate-pop-in items-center gap-3 border-t border-line bg-raised px-4 py-3 shadow-overlay">
+            <p class="min-w-0 flex-1 text-label text-fg-muted">{pending().message}</p>
+            <button
+              type="button"
+              onClick={async () => {
+                const queued = pending();
+                setPendingAction(null);
+                await run(queued.action, "Could not complete that");
+              }}
+              class="shrink-0 rounded-sharp border border-danger-soft px-3 py-1 text-label text-danger transition-colors duration-100 hover:bg-danger-soft"
+            >
+              {pending().confirm}
+            </button>
+            <button
+              type="button"
+              onClick={() => setPendingAction(null)}
+              class="shrink-0 rounded-sharp border border-line px-3 py-1 text-label text-fg-muted transition-colors duration-100 hover:bg-fill hover:text-fg"
+            >
+              Cancel
+            </button>
+          </div>
+        )}
+      </Show>
+
       <Show when={feedback()}>
-        <div class="pointer-events-none fixed right-4 bottom-4 z-toast animate-pop-in rounded-sharp border border-line bg-raised px-3 py-2 text-label text-fg-muted shadow-overlay">
+        <div
+          role="status"
+          aria-live="polite"
+          class="pointer-events-none fixed right-4 bottom-4 z-toast animate-pop-in rounded-sharp border border-line bg-raised px-3 py-2 text-label text-fg-muted shadow-overlay"
+        >
           {feedback()}
         </div>
       </Show>

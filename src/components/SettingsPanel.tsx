@@ -1,23 +1,16 @@
-import { For, Show, createEffect, createSignal } from "solid-js";
-import type {
-  ConfigDirectoryInfo,
-  Group,
-  Settings,
-  WindowSizeLimits,
-} from "../types";
+import { For, Show, createSignal } from "solid-js";
+import type { ConfigDirectoryInfo, Group, Settings } from "../types";
 
 interface SettingsPanelProps {
   open: boolean;
   settings: Settings;
   configDirectory: ConfigDirectoryInfo;
-  windowSizeLimits: WindowSizeLimits;
   groups: Group[];
   onClose: () => void;
   onSetHotkey: (value: string) => void;
   onToggleStartup: (value: boolean) => void;
   onToggleCloseOnLaunch: (value: boolean) => void;
   onSetDisplayMode: (value: "grid" | "list") => void;
-  onSetWindowSize: (width: number, height: number) => void;
   onChooseConfigDirectory: () => void;
   onOpenConfigDirectory: () => void;
   onResetConfigDirectory: () => void;
@@ -37,15 +30,6 @@ export function SettingsPanel(props: SettingsPanelProps) {
   const [editingGroupId, setEditingGroupId] = createSignal<string | null>(null);
   const [editingGroupName, setEditingGroupName] = createSignal("");
   const [groupError, setGroupError] = createSignal("");
-  const [windowWidth, setWindowWidth] = createSignal(String(props.settings.windowWidth));
-  const [windowHeight, setWindowHeight] = createSignal(
-    String(props.settings.windowHeight),
-  );
-
-  createEffect(() => {
-    setWindowWidth(String(props.settings.windowWidth));
-    setWindowHeight(String(props.settings.windowHeight));
-  });
 
   const groupNameExists = (name: string, excludeId?: string | null) =>
     props.groups.some(
@@ -56,8 +40,23 @@ export function SettingsPanel(props: SettingsPanelProps) {
 
   return (
     <Show when={props.open}>
-      <div class="fixed inset-0 z-scrim flex animate-fade-in justify-end rounded-window bg-scrim">
-        <aside class="flex h-full min-h-0 w-[340px] animate-slide-in flex-col overflow-hidden border-l border-line bg-raised shadow-overlay">
+      <div
+        class="fixed inset-0 z-scrim flex animate-fade-in justify-end rounded-window bg-scrim"
+        onClick={(event) => {
+          // Clicking the scrim dismisses, matching the editor dialog and the
+          // context menu. Only the scrim itself counts, not a click that
+          // bubbled up from inside the drawer.
+          if (event.target === event.currentTarget) {
+            props.onClose();
+          }
+        }}
+      >
+        <aside
+          role="dialog"
+          aria-modal="true"
+          aria-label="Settings"
+          class="flex h-full min-h-0 w-[340px] animate-slide-in flex-col overflow-hidden border-l border-line bg-raised shadow-overlay"
+        >
           <div class="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
             <h2 class="text-title font-semibold text-fg">Settings</h2>
             <button
@@ -116,48 +115,6 @@ export function SettingsPanel(props: SettingsPanelProps) {
                 </div>
               </div>
 
-              <div class={`flex flex-col gap-2 ${ROW}`}>
-                <div class="flex items-center justify-between gap-3">
-                  <p class="text-label text-fg-muted">Window size</p>
-                  <p class="font-mono text-meta text-fg-subtle">
-                    {props.windowSizeLimits.minWidth}–{props.windowSizeLimits.maxWidth} ×{" "}
-                    {props.windowSizeLimits.minHeight}–{props.windowSizeLimits.maxHeight}
-                  </p>
-                </div>
-                <div class="flex items-center gap-2">
-                  <input
-                    type="number"
-                    min={props.windowSizeLimits.minWidth}
-                    max={props.windowSizeLimits.maxWidth}
-                    step="20"
-                    value={windowWidth()}
-                    onInput={(event) => setWindowWidth(event.currentTarget.value)}
-                    class="field-input min-w-0 flex-1"
-                  />
-                  <input
-                    type="number"
-                    min={props.windowSizeLimits.minHeight}
-                    max={props.windowSizeLimits.maxHeight}
-                    step="20"
-                    value={windowHeight()}
-                    onInput={(event) => setWindowHeight(event.currentTarget.value)}
-                    class="field-input min-w-0 flex-1"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const width = Number(windowWidth());
-                      const height = Number(windowHeight());
-                      if (Number.isFinite(width) && Number.isFinite(height)) {
-                        props.onSetWindowSize(width, height);
-                      }
-                    }}
-                    class="shrink-0 rounded-sharp bg-signal px-2 py-1 text-meta font-semibold text-canvas transition-opacity duration-100 hover:opacity-90"
-                  >
-                    Apply
-                  </button>
-                </div>
-              </div>
             </section>
 
             <section class="flex flex-col">

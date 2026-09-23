@@ -32,6 +32,11 @@ pub struct LaunchItem {
     pub working_dir: Option<String>,
     #[serde(default)]
     pub keep_open: bool,
+    /// Launch through the shell's `runas` verb so Windows prompts for elevation.
+    /// Several launcher targets (packet capture, proxy settings, raw sockets)
+    /// simply do not work without it.
+    #[serde(default)]
+    pub run_as_admin: bool,
     #[serde(default)]
     pub is_favorite: bool,
     #[serde(default)]
@@ -113,8 +118,10 @@ pub struct BootstrapData {
     pub items: Vec<LaunchItem>,
     pub groups: Vec<Group>,
     pub settings: Settings,
-    pub window_size_limits: WindowSizeLimits,
     pub config_directory: ConfigDirectoryInfo,
+    /// A non-fatal problem from startup for the UI to surface, such as the global
+    /// hotkey being unavailable. The app runs; the user just needs to know.
+    pub startup_warning: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -129,6 +136,7 @@ pub struct CreateItemPayload {
     pub runtime_args: Option<String>,
     pub working_dir: Option<String>,
     pub keep_open: Option<bool>,
+    pub run_as_admin: Option<bool>,
     pub group_id: Option<String>,
 }
 
@@ -144,6 +152,7 @@ pub struct UpdateItemPayload {
     pub runtime_args: Option<Option<String>>,
     pub working_dir: Option<Option<String>>,
     pub keep_open: Option<bool>,
+    pub run_as_admin: Option<bool>,
     pub group_id: Option<Option<String>>,
     pub custom_icon_path: Option<String>,
     pub clear_custom_icon: Option<bool>,
@@ -187,18 +196,9 @@ pub struct DiscoveryCandidateImport {
     pub target: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PersistedItems {
     pub items: Vec<LaunchItem>,
     pub groups: Vec<Group>,
-}
-
-impl Default for PersistedItems {
-    fn default() -> Self {
-        Self {
-            items: Vec::new(),
-            groups: Vec::new(),
-        }
-    }
 }

@@ -28,6 +28,7 @@ function item(
     runtimeArgs: null,
     workingDir: null,
     keepOpen: false,
+    runAsAdmin: false,
     isFavorite: false,
     launchCount: 0,
     lastLaunchedAt: null,
@@ -160,8 +161,11 @@ export const fixtureItems: LaunchItem[] = [
 
 export function fixtureBootstrap(displayMode: Settings["displayMode"] = "list"): BootstrapData {
   return {
-    items: fixtureItems,
-    groups: fixtureGroups,
+    // Copies, not the arrays themselves: the shim's mutating handlers push into
+    // these, and handing the app the same reference would double-count whatever
+    // the handler also returned.
+    items: [...fixtureItems],
+    groups: [...fixtureGroups],
     settings: {
       hotkey: "Alt+Space",
       launchOnStartup: false,
@@ -173,17 +177,12 @@ export function fixtureBootstrap(displayMode: Settings["displayMode"] = "list"):
       windowX: null,
       windowY: null,
     },
-    windowSizeLimits: {
-      minWidth: 760,
-      minHeight: 560,
-      maxWidth: 1400,
-      maxHeight: 960,
-    },
     configDirectory: {
       currentPath: "C:\\Users\\Administrator\\AppData\\Roaming\\com.deskrun.desktop",
       defaultPath: "C:\\Users\\Administrator\\AppData\\Roaming\\com.deskrun.desktop",
       usingCustomPath: false,
     },
+    startupWarning: null,
   };
 }
 

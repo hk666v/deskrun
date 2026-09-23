@@ -52,20 +52,54 @@ if (import.meta.env.DEV && !window.__TAURI_INTERNALS__) {
     set_hotkey: bootstrap,
     set_launch_on_startup: bootstrap,
     set_close_on_launch: bootstrap,
-    set_window_size: bootstrap,
-    sync_window_size: bootstrap,
+    sync_window_size: () => bootstrap().settings,
     set_config_directory: bootstrap,
     reorder_groups: () => fixtureGroups,
-    create_group: (args) => [
-      ...fixtureGroups,
-      { id: `fixture-group-${Date.now()}`, name: String(args.name), sortOrder: fixtureGroups.length },
-    ],
+    create_group: (args) => {
+      const name = String(args.name).trim();
+
+      // Mirrors the backend's uniqueness rule, so the dev environment rejects
+      // exactly the names the real one does.
+      if (fixtureGroups.some((group) => group.name.toLowerCase() === name.toLowerCase())) {
+        return Promise.reject("group name already exists");
+      }
+
+      // Persist, then return the single new group — the shape the real command
+      // answers with, not the whole list.
+      const group = {
+        id: `fixture-group-${Date.now()}`,
+        name,
+        sortOrder: fixtureGroups.length,
+      };
+      fixtureGroups.push(group);
+      return group;
+    },
     delete_item: () => undefined,
     hide_main_window: () => undefined,
     open_config_directory: () => undefined,
     launch_item: (args) => {
       const found = fixtureItems.find((entry) => entry.id === args.itemId);
       return found ? { ...found, launchCount: found.launchCount + 1 } : undefined;
+    },
+    launch_item_as_admin: (args) => {
+      const found = fixtureItems.find((entry) => entry.id === args.itemId);
+      return found ? { ...found, launchCount: found.launchCount + 1 } : undefined;
+    },
+    duplicate_item: (args) => {
+      const found = fixtureItems.find((entry) => entry.id === args.itemId);
+      if (!found) {
+        return undefined;
+      }
+      const copy = {
+        ...found,
+        id: `fixture-copy-${Date.now()}`,
+        name: `${found.name} (2)`,
+        isFavorite: false,
+        launchCount: 0,
+        lastLaunchedAt: null,
+      };
+      fixtureItems.push(copy);
+      return copy;
     },
     toggle_favorite: (args) => {
       const found = fixtureItems.find((entry) => entry.id === args.itemId);

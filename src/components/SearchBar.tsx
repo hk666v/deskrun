@@ -19,6 +19,7 @@ export function SearchBar(props: SearchBarProps) {
         ref={props.inputRef}
         value={props.query}
         onInput={props.onInput}
+        aria-label="Search apps, folders, commands, or URLs"
         placeholder="Search apps, folders, commands, or URLs"
         class="min-w-0 flex-1 bg-transparent text-title text-fg outline-none placeholder:text-fg-faint"
       />

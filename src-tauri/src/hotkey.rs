@@ -1,13 +1,12 @@
 use anyhow::{anyhow, Result};
 use tauri::{
-    AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, PhysicalSize, Position, Size,
-    WebviewWindow,
+    AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, Position, Size, WebviewWindow,
 };
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut};
 
 use crate::app_state::SharedState;
 use crate::models::{
-    MAX_WINDOW_WIDTH, MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH, Settings, WindowSizeLimits,
+    Settings, WindowSizeLimits, MAX_WINDOW_WIDTH, MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH,
 };
 
 #[cfg(target_os = "windows")]
@@ -20,20 +19,69 @@ use windows::Win32::{
     UI::WindowsAndMessaging::GetCursorPos,
 };
 
-pub fn register_hotkey(app: &AppHandle, shortcut: &str) -> Result<()> {
-    let parsed = Shortcut::try_from(shortcut).map_err(|error| anyhow!(error.to_string()))?;
+/// Installs `next` as the global hotkey, keeping `previous` live until the new
+/// binding is known to work. Registering before unregistering matters: if the
+/// new combination is rejected, the old one is still there and the launcher
+/// stays reachable.
+pub fn register_hotkey(app: &AppHandle, previous: Option<&str>, next: &str) -> Result<()> {
+    if previous == Some(next) {
+        return Ok(());
+    }
+
+    let parsed =
+        Shortcut::try_from(next).map_err(|error| anyhow!("invalid hotkey \"{next}\": {error}"))?;
     let manager = app.global_shortcut();
-    let _ = manager.unregister_all();
-    manager
-        .register(parsed)
-        .map_err(|error| anyhow!(error.to_string()))
+
+    manager.register(parsed).map_err(|error| {
+        anyhow!("\"{next}\" could not be registered — another program may already own it: {error}")
+    })?;
+
+    if let Some(stale) = previous.and_then(|value| Shortcut::try_from(value).ok()) {
+        if stale != parsed {
+            let _ = manager.unregister(stale);
+        }
+    }
+
+    Ok(())
+}
+
+/// Startup path. A hotkey conflict must not stop the app from booting, since the
+/// tray is still a working way in; report it and carry on.
+pub fn register_hotkey_or_warn(app: &AppHandle, next: &str) -> Option<String> {
+    match register_hotkey(app, None, next) {
+        Ok(()) => None,
+        Err(error) => {
+            eprintln!("deskrun: {error}");
+            Some(error.to_string())
+        }
+    }
 }
 
 pub fn hide_main_window(app: &AppHandle) -> Result<()> {
     let window = main_window(app)?;
-    remember_current_window_position(app, &window);
+    persist_window_state(app);
     window.hide()?;
     Ok(())
+}
+
+/// Captures the current window position and writes settings to disk. Called on
+/// the paths where the window is going away — hiding, quitting — because the
+/// position is otherwise only tracked in memory.
+pub fn persist_window_state(app: &AppHandle) {
+    if let Ok(window) = main_window(app) {
+        remember_current_window_position(app, &window);
+    }
+    flush_settings_to_disk(app);
+}
+
+fn flush_settings_to_disk(app: &AppHandle) {
+    let Some(state) = app.try_state::<SharedState>() else {
+        return;
+    };
+    let Ok(mut storage) = state.lock() else {
+        return;
+    };
+    let _ = storage.flush_settings();
 }
 
 pub fn show_main_window(app: &AppHandle) -> Result<()> {
@@ -61,13 +109,18 @@ pub fn apply_window_size(app: &AppHandle, width: u32, height: u32) -> Result<()>
     Ok(())
 }
 
+/// Records the size the user dragged the window to.
+///
+/// Only the size constraint is refreshed here. `keep_window_visible` used to run
+/// on every resize event as well, which repositioned the window mid-drag and
+/// fought the user's mouse.
 pub fn sync_window_size(app: &AppHandle, width: u32, height: u32) -> Result<WindowSizeLimits> {
     let window = main_window(app)?;
     let limits = active_window_size_limits(app, &window)?;
-    let clamped_width = width.clamp(limits.min_width, limits.max_width);
-    let clamped_height = height.clamp(limits.min_height, limits.max_height);
     apply_window_size_constraints(&window, limits.max_width, limits.max_height)?;
 
+    let clamped_width = width.clamp(limits.min_width, limits.max_width);
+    let clamped_height = height.clamp(limits.min_height, limits.max_height);
     if clamped_width != width || clamped_height != height {
         window.set_size(Size::Logical(LogicalSize::new(
             clamped_width as f64,
@@ -75,7 +128,6 @@ pub fn sync_window_size(app: &AppHandle, width: u32, height: u32) -> Result<Wind
         )))?;
     }
 
-    keep_window_visible(app, &window, current_settings(app).as_ref())?;
     Ok(limits)
 }
 
@@ -93,39 +145,22 @@ fn main_window(app: &AppHandle) -> Result<WebviewWindow> {
         .ok_or_else(|| anyhow!("main window is missing"))
 }
 
-pub fn window_size_limits() -> Result<WindowSizeLimits> {
-    #[cfg(not(target_os = "windows"))]
-    {
-        Ok(WindowSizeLimits {
-            min_width: MIN_WINDOW_WIDTH,
-            min_height: MIN_WINDOW_HEIGHT,
-            max_width: MAX_WINDOW_WIDTH,
-            max_height: 1080,
-        })
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        let monitor = current_monitor_rect()?;
-        let available_width = (monitor.right - monitor.left).max(MIN_WINDOW_WIDTH as i32) as u32;
-        let available_height = (monitor.bottom - monitor.top).max(MIN_WINDOW_HEIGHT as i32) as u32;
-
-        Ok(WindowSizeLimits {
-            min_width: MIN_WINDOW_WIDTH,
-            min_height: MIN_WINDOW_HEIGHT,
-            max_width: available_width.min(MAX_WINDOW_WIDTH).max(MIN_WINDOW_WIDTH),
-            max_height: available_height.max(MIN_WINDOW_HEIGHT),
-        })
-    }
+/// The window's current DPI scale, floored so it can never be zero — dividing by
+/// it would otherwise yield an infinity that clamps every size to nothing.
+fn window_scale(window: &WebviewWindow) -> f64 {
+    window.scale_factor().unwrap_or(1.0).max(0.1)
 }
 
-pub fn remember_window_position(app: &AppHandle, x: i32, y: i32) -> Result<()> {
+/// Updates the remembered window position in memory. Persisting is deferred to
+/// [`persist_window_state`], because this fires on every move event.
+pub fn remember_window_position(app: &AppHandle, x: i32, y: i32) {
     let Some(state) = app.try_state::<SharedState>() else {
-        return Ok(());
+        return;
     };
-
-    let mut storage = state.lock().map_err(anyhow::Error::msg)?;
-    storage.set_window_position(x, y)
+    let Ok(mut storage) = state.lock() else {
+        return;
+    };
+    storage.set_window_position(x, y);
 }
 
 fn apply_window_size_constraints(
@@ -155,14 +190,17 @@ fn place_window_for_display(
 
     #[cfg(target_os = "windows")]
     {
-        let preferred_position = settings
-            .and_then(saved_window_position)
-            .and_then(|(x, y)| monitor_rect_for_point(x, y, false).ok().flatten().map(|rect| (rect, x, y)));
+        let preferred_position = settings.and_then(saved_window_position).and_then(|(x, y)| {
+            monitor_rect_for_point(x, y, false)
+                .ok()
+                .flatten()
+                .map(|rect| (rect, x, y))
+        });
 
         let monitor = preferred_position
             .map(|(rect, _, _)| rect)
             .unwrap_or(current_monitor_rect()?);
-        let limits = window_size_limits_for_rect(&monitor);
+        let limits = window_size_limits_for_rect(&monitor, window_scale(window));
         apply_window_size_constraints(window, limits.max_width, limits.max_height)?;
         clamp_window_size_to_monitor(window, &limits)?;
 
@@ -192,7 +230,10 @@ fn keep_window_visible(
 
     #[cfg(target_os = "windows")]
     {
-        let current_position = window.outer_position().ok().map(|position| (position.x, position.y));
+        let current_position = window
+            .outer_position()
+            .ok()
+            .map(|position| (position.x, position.y));
         let saved_position = settings.and_then(saved_window_position);
         let anchor = current_position.or(saved_position);
         let monitor = if let Some((x, y)) = anchor {
@@ -200,7 +241,7 @@ fn keep_window_visible(
         } else {
             current_monitor_rect()?
         };
-        let limits = window_size_limits_for_rect(&monitor);
+        let limits = window_size_limits_for_rect(&monitor, window_scale(window));
         apply_window_size_constraints(window, limits.max_width, limits.max_height)?;
         clamp_window_size_to_monitor(window, &limits)?;
 
@@ -223,7 +264,7 @@ fn current_settings(app: &AppHandle) -> Option<Settings> {
 
 fn remember_current_window_position(app: &AppHandle, window: &WebviewWindow) {
     if let Ok(position) = window.outer_position() {
-        let _ = remember_window_position(app, position.x, position.y);
+        remember_window_position(app, position.x, position.y);
     }
 }
 
@@ -231,18 +272,35 @@ fn saved_window_position(settings: &Settings) -> Option<(i32, i32)> {
     Some((settings.window_x?, settings.window_y?))
 }
 
+/// The window's usable size range, in **logical** pixels.
+///
+/// Everything the user sees, and everything `settings.json` stores, is logical,
+/// so the limits have to be too. They used to be raw `GetMonitorInfoW` work-area
+/// pixels, which on a 150%-scaled display capped `MAX_WINDOW_WIDTH` at
+/// `1400 / 1.5 ≈ 933` logical pixels. With a 760-pixel minimum that left almost
+/// no range at all, so dragging the window edge appeared to do nothing.
 fn active_window_size_limits(app: &AppHandle, window: &WebviewWindow) -> Result<WindowSizeLimits> {
+    let scale = window_scale(window);
+
     #[cfg(not(target_os = "windows"))]
     {
         let _ = app;
         let _ = window;
-        window_size_limits()
+        Ok(WindowSizeLimits {
+            min_width: MIN_WINDOW_WIDTH,
+            min_height: MIN_WINDOW_HEIGHT,
+            max_width: MAX_WINDOW_WIDTH,
+            max_height: (2160.0 / scale).round() as u32,
+        })
     }
 
     #[cfg(target_os = "windows")]
     {
         let settings = current_settings(app);
-        let current_position = window.outer_position().ok().map(|position| (position.x, position.y));
+        let current_position = window
+            .outer_position()
+            .ok()
+            .map(|position| (position.x, position.y));
         let saved_position = settings.as_ref().and_then(saved_window_position);
         let anchor = current_position.or(saved_position);
         let monitor = if let Some((x, y)) = anchor {
@@ -250,29 +308,42 @@ fn active_window_size_limits(app: &AppHandle, window: &WebviewWindow) -> Result<
         } else {
             current_monitor_rect()?
         };
-        Ok(window_size_limits_for_rect(&monitor))
+
+        Ok(window_size_limits_for_rect(&monitor, scale))
     }
 }
 
-fn window_size_limits_for_rect(monitor: &RECT) -> WindowSizeLimits {
-    let available_width = (monitor.right - monitor.left).max(MIN_WINDOW_WIDTH as i32) as u32;
-    let available_height = (monitor.bottom - monitor.top).max(MIN_WINDOW_HEIGHT as i32) as u32;
+/// `monitor` is a work area in physical pixels; the result is in logical pixels.
+#[cfg(target_os = "windows")]
+fn window_size_limits_for_rect(monitor: &RECT, scale: f64) -> WindowSizeLimits {
+    let to_logical = |physical: i32| ((physical as f64 / scale).round() as u32).max(1);
+
+    let available_width = to_logical(monitor.right - monitor.left).max(MIN_WINDOW_WIDTH);
+    let available_height = to_logical(monitor.bottom - monitor.top).max(MIN_WINDOW_HEIGHT);
 
     WindowSizeLimits {
         min_width: MIN_WINDOW_WIDTH,
         min_height: MIN_WINDOW_HEIGHT,
-        max_width: available_width.min(MAX_WINDOW_WIDTH).max(MIN_WINDOW_WIDTH),
+        max_width: available_width.clamp(MIN_WINDOW_WIDTH, MAX_WINDOW_WIDTH),
         max_height: available_height.max(MIN_WINDOW_HEIGHT),
     }
 }
 
+/// Shrinks a window that is larger than its monitor allows. Both sides are
+/// converted to logical pixels first: comparing the physical `outer_size`
+/// against logical limits made the window snap smaller on any scaled display,
+/// which is what fought the user's drag.
 fn clamp_window_size_to_monitor(window: &WebviewWindow, limits: &WindowSizeLimits) -> Result<()> {
+    let scale = window_scale(window);
     let size = window.outer_size()?;
-    let next_width = size.width.min(limits.max_width);
-    let next_height = size.height.min(limits.max_height);
+    let logical_width = ((size.width as f64 / scale).round() as u32).max(1);
+    let logical_height = ((size.height as f64 / scale).round() as u32).max(1);
 
-    if next_width != size.width || next_height != size.height {
-        window.set_size(Size::Physical(PhysicalSize::new(next_width, next_height)))?;
+    if logical_width > limits.max_width || logical_height > limits.max_height {
+        window.set_size(Size::Logical(LogicalSize::new(
+            logical_width.min(limits.max_width) as f64,
+            logical_height.min(limits.max_height) as f64,
+        )))?;
     }
 
     Ok(())
@@ -327,9 +398,7 @@ fn monitor_rect_for_point(x: i32, y: i32, nearest: bool) -> Result<Option<RECT>>
 }
 
 #[cfg(target_os = "windows")]
-fn monitor_rect(
-    monitor: windows::Win32::Graphics::Gdi::HMONITOR,
-) -> Result<RECT> {
+fn monitor_rect(monitor: windows::Win32::Graphics::Gdi::HMONITOR) -> Result<RECT> {
     let mut monitor_info = MONITORINFO {
         cbSize: std::mem::size_of::<MONITORINFO>() as u32,
         ..Default::default()
@@ -340,4 +409,91 @@ fn monitor_rect(
     }
 
     Ok(monitor_info.rcWork)
+}
+
+#[cfg(all(test, target_os = "windows"))]
+mod tests {
+    use super::*;
+    use tauri::PhysicalSize;
+
+    fn work_area(left: i32, top: i32, right: i32, bottom: i32) -> RECT {
+        RECT {
+            left,
+            top,
+            right,
+            bottom,
+        }
+    }
+
+    #[test]
+    fn center_position_sits_in_the_middle_of_the_work_area() {
+        let monitor = work_area(0, 0, 1920, 1040);
+        assert_eq!(
+            center_position_in_rect(&monitor, PhysicalSize::new(760, 560)),
+            (580, 240)
+        );
+    }
+
+    #[test]
+    fn center_position_handles_a_secondary_monitor_at_negative_coordinates() {
+        let monitor = work_area(-1920, 0, 0, 1040);
+        assert_eq!(
+            center_position_in_rect(&monitor, PhysicalSize::new(760, 560)),
+            (-1340, 240)
+        );
+    }
+
+    /// A position saved on a monitor that has since been unplugged must land
+    /// back inside the current work area rather than off-screen.
+    #[test]
+    fn a_saved_position_outside_every_monitor_is_pulled_back_in() {
+        let monitor = work_area(0, 0, 1920, 1040);
+        assert_eq!(
+            clamp_position_to_rect(&monitor, PhysicalSize::new(760, 560), -500, 9000),
+            (0, 480)
+        );
+    }
+
+    /// A work area smaller than the window pins it to the origin instead of
+    /// producing a negative maximum and panicking inside `clamp`.
+    #[test]
+    fn a_window_larger_than_the_work_area_is_pinned_to_its_origin() {
+        let monitor = work_area(0, 0, 800, 600);
+        assert_eq!(
+            clamp_position_to_rect(&monitor, PhysicalSize::new(1200, 900), 100, 100),
+            (0, 0)
+        );
+    }
+
+    /// A 3840x2160 work area at 150% scaling is 2560x1440 logical. The limits
+    /// used to be raw physical pixels, so `MAX_WINDOW_WIDTH` capped the window at
+    /// 1400 physical ≈ 933 logical — barely above the 760 minimum, which left
+    /// almost no range and made dragging the window edge look broken.
+    #[test]
+    fn size_limits_are_logical_not_physical() {
+        let monitor = work_area(0, 0, 3840, 2160);
+        let limits = window_size_limits_for_rect(&monitor, 1.5);
+
+        assert_eq!(limits.max_width, MAX_WINDOW_WIDTH);
+        assert_eq!(limits.max_height, 1440);
+        assert_eq!(limits.min_width, MIN_WINDOW_WIDTH);
+    }
+
+    #[test]
+    fn an_unscaled_display_is_unaffected_by_the_conversion() {
+        let monitor = work_area(0, 0, 1920, 1040);
+        let limits = window_size_limits_for_rect(&monitor, 1.0);
+
+        assert_eq!(limits.max_width, MAX_WINDOW_WIDTH);
+        assert_eq!(limits.max_height, 1040);
+    }
+
+    #[test]
+    fn a_work_area_smaller_than_the_minimum_still_offers_the_minimum() {
+        let monitor = work_area(0, 0, 700, 500);
+        let limits = window_size_limits_for_rect(&monitor, 1.0);
+
+        assert_eq!(limits.max_width, MIN_WINDOW_WIDTH);
+        assert_eq!(limits.max_height, MIN_WINDOW_HEIGHT);
+    }
 }

@@ -19,10 +19,11 @@ interface ItemEditorDialogProps {
     runtimeArgs?: string | null;
     workingDir?: string | null;
     keepOpen?: boolean;
+    runAsAdmin?: boolean;
     groupId: string | null;
     customIconPath?: string;
     clearCustomIcon?: boolean;
-  }) => void;
+  }) => void | Promise<void>;
 }
 
 export function ItemEditorDialog(props: ItemEditorDialogProps) {
@@ -33,10 +34,14 @@ export function ItemEditorDialog(props: ItemEditorDialogProps) {
   const [runtimeArgs, setRuntimeArgs] = createSignal("");
   const [workingDir, setWorkingDir] = createSignal("");
   const [keepOpen, setKeepOpen] = createSignal(false);
+  const [runAsAdmin, setRunAsAdmin] = createSignal(false);
   const [groupId, setGroupId] = createSignal<string | null>(null);
   const [iconMode, setIconMode] = createSignal<"auto" | "custom">("auto");
   const [customIconPath, setCustomIconPath] = createSignal<string>();
   const [clearCustomIcon, setClearCustomIcon] = createSignal(false);
+  const [saving, setSaving] = createSignal(false);
+  const [saveError, setSaveError] = createSignal("");
+  let nameInput: HTMLInputElement | undefined;
 
   const isCommandMode = () =>
     props.mode === "create-command" || props.item?.kind === "command";
@@ -60,11 +65,58 @@ export function ItemEditorDialog(props: ItemEditorDialogProps) {
     setRuntimeArgs(item?.runtimeArgs ?? "");
     setWorkingDir(item?.workingDir ?? "");
     setKeepOpen(item?.keepOpen ?? false);
+    setRunAsAdmin(item?.runAsAdmin ?? false);
     setGroupId(item?.groupId ?? null);
     setIconMode(item?.iconSource === "custom" ? "custom" : "auto");
     setCustomIconPath(undefined);
     setClearCustomIcon(false);
+    setSaveError("");
+    setSaving(false);
+
+    // Put the caret where the user is most likely to start typing, so the first
+    // keystroke lands in the dialog rather than on the launcher behind it.
+    window.setTimeout(() => nameInput?.focus(), 0);
   });
+
+  const submit = async () => {
+    if (name().trim().length === 0 || saving()) {
+      return;
+    }
+
+    setSaving(true);
+    setSaveError("");
+    try {
+      await props.onSave({
+        name: name().trim(),
+        target: target().trim(),
+        command: isCommandMode() ? target().trim() : undefined,
+        note: note().trim() || null,
+        fixedArgs: isCommandMode() ? fixedArgs().trim() || null : undefined,
+        runtimeArgs: isCommandMode() ? runtimeArgs().trim() || null : undefined,
+        workingDir: isCommandMode() ? workingDir().trim() || null : undefined,
+        keepOpen: isCommandMode() ? keepOpen() : undefined,
+        runAsAdmin: runAsAdmin(),
+        groupId: groupId(),
+        customIconPath: iconMode() === "custom" ? customIconPath() : undefined,
+        clearCustomIcon:
+          iconMode() === "auto"
+            ? clearCustomIcon() || props.item?.iconSource === "custom"
+            : false,
+      });
+    } catch (error) {
+      // Stay open and say what went wrong. This used to fail silently — the
+      // button appeared to do nothing at all, so the user just kept clicking.
+      setSaveError(
+        typeof error === "string"
+          ? error
+          : error instanceof Error
+            ? error.message
+            : String(error),
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const pickIcon = async () => {
     props.onBusyChange(true);
@@ -99,10 +151,15 @@ export function ItemEditorDialog(props: ItemEditorDialogProps) {
   return (
     <Show when={props.open}>
       <div class="fixed inset-0 z-scrim flex animate-fade-in items-center justify-center rounded-window bg-scrim">
-        <div class="flex max-h-[calc(100vh-32px)] w-[min(520px,calc(100vw-32px))] animate-pop-in flex-col overflow-hidden rounded-panel border border-line bg-raised shadow-overlay">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="item-editor-title"
+          class="flex max-h-[calc(100vh-32px)] w-[min(520px,calc(100vw-32px))] animate-pop-in flex-col overflow-hidden rounded-panel border border-line bg-raised shadow-overlay"
+        >
           <div class="flex items-start justify-between gap-4 border-b border-line px-4 py-3">
             <div class="min-w-0">
-              <h2 class="text-title font-semibold text-fg">
+              <h2 id="item-editor-title" class="text-title font-semibold text-fg">
                 {props.mode === "create-url"
                   ? "Add URL"
                   : props.mode === "create-command"
@@ -131,6 +188,7 @@ export function ItemEditorDialog(props: ItemEditorDialogProps) {
           <div class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
             <Field label="Name">
               <input
+                ref={nameInput}
                 value={name()}
                 onInput={(event) => setName(event.currentTarget.value)}
                 class="field-input"
@@ -215,6 +273,24 @@ export function ItemEditorDialog(props: ItemEditorDialogProps) {
               </>
             </Show>
 
+            {/* Elevating a browser is meaningless, so URL items are left out. */}
+            <Show when={props.mode !== "create-url" && props.item?.kind !== "url"}>
+              <label class="flex items-center justify-between gap-3 rounded-sharp border border-line px-3 py-2 text-label text-fg-muted">
+                <span class="min-w-0">
+                  Run as administrator
+                  <span class="mt-0.5 block text-meta text-fg-subtle">
+                    Windows asks for permission every time.
+                  </span>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={runAsAdmin()}
+                  onChange={(event) => setRunAsAdmin(event.currentTarget.checked)}
+                  class="h-3.5 w-3.5 shrink-0 accent-signal"
+                />
+              </label>
+            </Show>
+
             <Field label="Group">
               <select
                 value={groupId() ?? ""}
@@ -261,6 +337,15 @@ export function ItemEditorDialog(props: ItemEditorDialogProps) {
             </Show>
           </div>
 
+          <Show when={saveError()}>
+            <div
+              role="alert"
+              class="border-t border-danger-soft px-4 py-2 text-label text-danger"
+            >
+              {saveError()}
+            </div>
+          </Show>
+
           <div class="flex items-center justify-between gap-3 border-t border-line px-4 py-3">
             <Show when={props.mode === "edit" && props.item && props.onDelete}>
               <button
@@ -281,28 +366,11 @@ export function ItemEditorDialog(props: ItemEditorDialogProps) {
               </button>
               <button
                 type="button"
-                onClick={() =>
-                  props.onSave({
-                    name: name().trim(),
-                    target: target().trim(),
-                    command: isCommandMode() ? target().trim() : undefined,
-                    note: note().trim() || null,
-                    fixedArgs: isCommandMode() ? fixedArgs().trim() || null : undefined,
-                    runtimeArgs: isCommandMode() ? runtimeArgs().trim() || null : undefined,
-                    workingDir: isCommandMode() ? workingDir().trim() || null : undefined,
-                    keepOpen: isCommandMode() ? keepOpen() : undefined,
-                    groupId: groupId(),
-                    customIconPath:
-                      iconMode() === "custom" ? customIconPath() : undefined,
-                    clearCustomIcon:
-                      iconMode() === "auto"
-                        ? clearCustomIcon() || props.item?.iconSource === "custom"
-                        : false,
-                  })
-                }
-                class="rounded-sharp bg-signal px-4 py-1.5 text-label font-semibold text-canvas transition-opacity duration-100 hover:opacity-90"
+                disabled={name().trim().length === 0 || saving()}
+                onClick={submit}
+                class="rounded-sharp bg-signal px-4 py-1.5 text-label font-semibold text-canvas transition-opacity duration-100 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-45"
               >
-                Save
+                {saving() ? "Saving…" : "Save"}
               </button>
             </div>
           </div>

@@ -6,6 +6,7 @@ import type {
   DiscoveryScanOptions,
   Group,
   LaunchItem,
+  Settings,
   UpdateItemPayload,
 } from "../types";
 
@@ -49,6 +50,16 @@ export function launchItem(itemId: string) {
   return invoke<LaunchItem>("launch_item", { itemId });
 }
 
+/// Elevates for this one run regardless of the item's own setting, so a UAC
+/// prompt appears even for something normally launched unelevated.
+export function launchItemAsAdmin(itemId: string) {
+  return invoke<LaunchItem>("launch_item_as_admin", { itemId });
+}
+
+export function duplicateItem(itemId: string) {
+  return invoke<LaunchItem>("duplicate_item", { itemId });
+}
+
 export function toggleFavorite(itemId: string, favorite: boolean) {
   return invoke<LaunchItem>("toggle_favorite", { itemId, favorite });
 }
@@ -81,12 +92,8 @@ export function setDisplayMode(displayMode: "grid" | "list") {
   return invoke<BootstrapData>("set_display_mode", { displayMode });
 }
 
-export function setWindowSize(width: number, height: number) {
-  return invoke<BootstrapData>("set_window_size", { width, height });
-}
-
 export function syncWindowSize(width: number, height: number) {
-  return invoke<BootstrapData>("sync_window_size", { width, height });
+  return invoke<Settings>("sync_window_size", { width, height });
 }
 
 export function setConfigDirectory(path: string | null) {
@@ -107,4 +114,8 @@ export function openConfigDirectory() {
 
 export function hideMainWindow() {
   return invoke<void>("hide_main_window");
+}
+
+export function readIcon(iconPath: string) {
+  return invoke<string>("read_icon", { iconPath });
 }

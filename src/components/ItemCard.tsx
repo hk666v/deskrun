@@ -1,7 +1,8 @@
-import { Show, createEffect, createSignal } from "solid-js";
-import { convertFileSrc } from "@tauri-apps/api/core";
+import { Show, createEffect, createSignal, onCleanup } from "solid-js";
 import type { LaunchItem } from "../types";
 import { buildCommandPreview } from "../lib/command-preview";
+import { compactPath } from "../lib/paths";
+import { loadIcon } from "../lib/icon-cache";
 
 const FALLBACK_LABEL: Record<LaunchItem["kind"], string> = {
   exe: "EXE",
@@ -30,18 +31,36 @@ interface ItemCardProps {
 }
 
 export function ItemCard(props: ItemCardProps) {
-  const [iconLoadFailed, setIconLoadFailed] = createSignal(false);
+  const [iconSrc, setIconSrc] = createSignal<string | null>(null);
+  let buttonRef: HTMLButtonElement | undefined;
 
+  // Icons come back from the backend as data URLs and are memoised per path, so
+  // re-rendering a card does not re-read the file.
   createEffect(() => {
-    props.item.iconPath;
-    props.item.id;
-    setIconLoadFailed(false);
+    const iconPath = props.item.iconPath;
+    setIconSrc(null);
+    if (!iconPath) {
+      return;
+    }
+
+    let cancelled = false;
+    void loadIcon(iconPath).then((dataUrl) => {
+      if (!cancelled) {
+        setIconSrc(dataUrl);
+      }
+    });
+    onCleanup(() => {
+      cancelled = true;
+    });
   });
 
-  const iconSrc = () =>
-    props.item.iconPath && !iconLoadFailed()
-      ? convertFileSrc(props.item.iconPath)
-      : null;
+  // Arrow keys move the selection but nothing scrolled the list, so the
+  // highlight could walk off-screen while the user kept pressing them.
+  createEffect(() => {
+    if (props.active) {
+      buttonRef?.scrollIntoView({ block: "nearest" });
+    }
+  });
 
   const targetValue = () => {
     if (props.item.kind !== "command") {
@@ -58,19 +77,12 @@ export function ItemCard(props: ItemCardProps) {
   const listTargetValue = () => {
     const value = compactTargetValue();
 
+    // A command or a URL is the content itself, not a path to shorten.
     if (props.item.kind === "command" || props.item.kind === "url") {
       return value;
     }
 
-    const normalized = value.replace(/\//g, "\\");
-    const segments = normalized.split("\\").filter(Boolean);
-    if (segments.length <= 3 || normalized.length <= 58) {
-      return value;
-    }
-
-    const drive = normalized.match(/^[A-Za-z]:/)?.[0];
-    const tail = segments.slice(-2).join("\\");
-    return drive ? `${drive}\\...\\${tail}` : `...\\${tail}`;
+    return compactPath(value);
   };
 
   const stateClass = () => {
@@ -118,7 +130,6 @@ export function ItemCard(props: ItemCardProps) {
             src={src()}
             alt={props.item.name}
             class={size === "grid" ? "h-7 w-7 object-contain" : "h-6 w-6 object-contain"}
-            onError={() => setIconLoadFailed(true)}
           />
         )}
       </Show>
@@ -131,6 +142,7 @@ export function ItemCard(props: ItemCardProps) {
       fallback={
         <button
           type="button"
+          ref={buttonRef}
           draggable={props.draggable}
           onMouseEnter={trackPreview}
           onMouseMove={trackPreview}
@@ -145,6 +157,7 @@ export function ItemCard(props: ItemCardProps) {
           onDragStart={props.onDragStart}
           onDragOver={props.onDragOver}
           onDrop={props.onDrop}
+          aria-haspopup="menu"
           class={`group relative grid min-h-[124px] w-full min-w-0 grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-hidden rounded-sharp border bg-raised px-3 py-3 text-left transition-colors duration-100 ${
             props.active ? "border-signal-line" : "border-line hover:border-line-strong"
           } ${stateClass()}`}
@@ -179,6 +192,7 @@ export function ItemCard(props: ItemCardProps) {
     >
       <button
         type="button"
+        ref={buttonRef}
         draggable={props.draggable}
         onMouseEnter={trackPreview}
         onMouseMove={trackPreview}
@@ -193,6 +207,7 @@ export function ItemCard(props: ItemCardProps) {
         onDragStart={props.onDragStart}
         onDragOver={props.onDragOver}
         onDrop={props.onDrop}
+        aria-haspopup="menu"
         class={`group relative grid w-full min-w-0 grid-cols-[36px_minmax(0,1fr)_72px] items-stretch gap-3 border-b border-line px-2 py-2 text-left transition-colors duration-100 last:border-b-0 ${
           hasNote() ? "min-h-[72px]" : "min-h-[56px]"
         } ${props.active ? "bg-fill-strong" : "hover:bg-fill"} ${stateClass()}`}
@@ -214,11 +229,8 @@ export function ItemCard(props: ItemCardProps) {
                 {props.item.name}
               </div>
               <Show when={props.item.isFavorite}>
-                <span
-                  class="h-1.5 w-1.5 shrink-0 rounded-full bg-signal"
-                  title="Pinned"
-                  aria-label="Pinned"
-                />
+                <span class="sr-only">Pinned</span>
+                <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-signal" />
               </Show>
             </div>
 

@@ -1,5 +1,6 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 import type { LaunchItem } from "../types";
+import type { QueryAction } from "../lib/query-actions";
 import { ItemCard } from "./ItemCard";
 
 interface ItemGridProps {
@@ -10,6 +11,8 @@ interface ItemGridProps {
   sectioned: boolean;
   query: string;
   viewId: string | null;
+  /// Offered instead of a dead end when nothing matches the query.
+  queryActions: QueryAction[];
   onLaunch: (item: LaunchItem) => void;
   onSelect: (item: LaunchItem) => void;
   onPreviewHover: (item: LaunchItem, x: number, y: number) => void;
@@ -17,7 +20,14 @@ interface ItemGridProps {
   onContextMenu: (item: LaunchItem, x: number, y: number) => void;
   onReorder: (fromId: string, toId: string) => void;
   onColumnsChange: (columns: number) => void;
+  onRunQueryAction: (action: QueryAction) => void;
 }
+
+const QUERY_ACTION_TAG: Record<QueryAction["kind"], string> = {
+  url: "URL",
+  number: "NUM",
+  web: "WEB",
+};
 
 type ItemSection = {
   id: "pinned" | "recent" | "unused";
@@ -142,10 +152,53 @@ export function ItemGrid(props: ItemGridProps) {
       <Show
         when={props.items.length > 0}
         fallback={
-          <div class="flex h-full min-h-[200px] flex-col items-center justify-center gap-2 rounded-panel border border-dashed border-line text-center">
-            <p class="text-title font-medium text-fg-muted">{emptyState().title}</p>
-            <p class="max-w-sm text-label text-fg-subtle">{emptyState().detail}</p>
-          </div>
+          <Show
+            when={props.queryActions.length > 0}
+            fallback={
+              <div class="flex h-full min-h-[200px] flex-col items-center justify-center gap-2 rounded-panel border border-dashed border-line text-center">
+                <p class="text-title font-medium text-fg-muted">{emptyState().title}</p>
+                <p class="max-w-sm text-label text-fg-subtle">{emptyState().detail}</p>
+              </div>
+            }
+          >
+            <div class="flex h-full min-h-[200px] flex-col items-center justify-center gap-3">
+              <p class="text-label text-fg-subtle">
+                Nothing in your library matches “{props.query.trim()}”
+              </p>
+              <div class="flex w-full max-w-md flex-col gap-1.5">
+                <For each={props.queryActions}>
+                  {(action, index) => (
+                    <button
+                      type="button"
+                      onClick={() => props.onRunQueryAction(action)}
+                      class={`grid grid-cols-[26px_minmax(0,1fr)_auto] items-center gap-3 rounded-sharp border px-3 py-2 text-left transition-colors duration-100 ${
+                        index() === 0
+                          ? "border-signal-line bg-fill-strong"
+                          : "border-line hover:bg-fill"
+                      }`}
+                    >
+                      <span class="flex h-6 w-6 items-center justify-center rounded-sharp border border-line bg-inset font-mono text-micro text-fg-subtle">
+                        {QUERY_ACTION_TAG[action.kind]}
+                      </span>
+                      <span class="min-w-0">
+                        <span class="block truncate text-label font-medium text-fg">
+                          {action.label}
+                        </span>
+                        <span class="block truncate text-meta text-fg-subtle">
+                          {action.detail}
+                        </span>
+                      </span>
+                      <Show when={index() === 0}>
+                        <span class="shrink-0 font-mono text-micro text-fg-faint">
+                          ENTER
+                        </span>
+                      </Show>
+                    </button>
+                  )}
+                </For>
+              </div>
+            </div>
+          </Show>
         }
       >
         <Show

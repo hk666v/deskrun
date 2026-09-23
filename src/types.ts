@@ -12,6 +12,8 @@ export interface LaunchItem {
   runtimeArgs: string | null;
   workingDir: string | null;
   keepOpen: boolean;
+  /** Launch through the shell's `runas` verb so Windows prompts for elevation. */
+  runAsAdmin: boolean;
   isFavorite: boolean;
   launchCount: number;
   lastLaunchedAt: string | null;
@@ -41,13 +43,6 @@ export interface Settings {
   windowY?: number | null;
 }
 
-export interface WindowSizeLimits {
-  minWidth: number;
-  minHeight: number;
-  maxWidth: number;
-  maxHeight: number;
-}
-
 export interface ConfigDirectoryInfo {
   currentPath: string;
   defaultPath: string;
@@ -74,8 +69,9 @@ export interface BootstrapData {
   items: LaunchItem[];
   groups: Group[];
   settings: Settings;
-  windowSizeLimits: WindowSizeLimits;
   configDirectory: ConfigDirectoryInfo;
+  /** A non-fatal startup problem to surface, such as the hotkey being taken. */
+  startupWarning: string | null;
 }
 
 export interface CreateItemPayload {
@@ -88,6 +84,7 @@ export interface CreateItemPayload {
   runtimeArgs?: string | null;
   workingDir?: string | null;
   keepOpen?: boolean;
+  runAsAdmin?: boolean;
   groupId?: string | null;
 }
 
@@ -101,6 +98,7 @@ export interface UpdateItemPayload {
   runtimeArgs?: string | null;
   workingDir?: string | null;
   keepOpen?: boolean;
+  runAsAdmin?: boolean;
   groupId?: string | null;
   customIconPath?: string;
   clearCustomIcon?: boolean;
