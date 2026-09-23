@@ -1,6 +1,7 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 import type { LaunchItem } from "../types";
 import type { QueryAction } from "../lib/query-actions";
+import { groupItems } from "../lib/item-order";
 import { ItemCard } from "./ItemCard";
 
 interface ItemGridProps {
@@ -29,34 +30,14 @@ const QUERY_ACTION_TAG: Record<QueryAction["kind"], string> = {
   web: "WEB",
 };
 
-type ItemSection = {
-  id: "pinned" | "recent" | "unused";
-  title: string;
-  items: LaunchItem[];
-};
-
 export function ItemGrid(props: ItemGridProps) {
   const [draggedId, setDraggedId] = createSignal<string | null>(null);
   const [overId, setOverId] = createSignal<string | null>(null);
   let gridRef: HTMLDivElement | undefined;
 
-  const sections = createMemo<ItemSection[]>(() => {
-    const pinned = props.items.filter((item) => item.isFavorite);
-    const recent = props.items.filter(
-      (item) => !item.isFavorite && (item.launchCount > 0 || item.lastLaunchedAt !== null),
-    );
-    const unused = props.items.filter(
-      (item) => !item.isFavorite && item.launchCount === 0 && item.lastLaunchedAt === null,
-    );
-
-    const all: ItemSection[] = [
-      { id: "pinned", title: "Pinned", items: pinned },
-      { id: "recent", title: "Recent", items: recent },
-      { id: "unused", title: "Unused", items: unused },
-    ];
-
-    return all.filter((section) => section.items.length > 0);
-  });
+  // The grouping lives in one place because the keyboard walk has to agree with
+  // it: see `displayOrder`.
+  const sections = createMemo(() => groupItems(props.items));
 
   // The keyboard's vertical step has to match whatever the CSS grid actually
   // resolved to, which depends on window width and on whether a scrollbar is
@@ -80,9 +61,10 @@ export function ItemGrid(props: ItemGridProps) {
     onCleanup(() => observer.disconnect());
   });
 
-  const renderItem = (item: LaunchItem, subdued = false) => (
+  const renderItem = (item: LaunchItem, index: number, subdued = false) => (
     <ItemCard
       item={item}
+      index={index}
       layout={props.viewMode}
       active={item.id === props.activeItemId}
       draggable={props.sortable}
@@ -220,7 +202,9 @@ export function ItemGrid(props: ItemGridProps) {
                   : undefined
               }
             >
-              <For each={props.items}>{(item) => renderItem(item)}</For>
+              <For each={props.items}>
+                {(item, index) => renderItem(item, index())}
+              </For>
             </div>
           }
         >
@@ -247,7 +231,7 @@ export function ItemGrid(props: ItemGridProps) {
                   </div>
                   <div class="flex flex-col">
                     <For each={section.items}>
-                      {(item) => renderItem(item, section.id === "unused")}
+                      {(item, index) => renderItem(item, index(), section.id === "unused")}
                     </For>
                   </div>
                 </section>

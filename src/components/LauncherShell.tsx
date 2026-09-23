@@ -90,6 +90,7 @@ export function LauncherShell(props: LauncherShellProps) {
       }`}
     >
       <div
+        data-summon={props.summonPhase}
         class={`relative h-full w-full overflow-hidden ${
           flush() ? "" : "rounded-window bg-canvas shadow-float ring-1 ring-line"
         } ${summonClass()}`}

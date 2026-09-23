@@ -13,6 +13,16 @@ const FALLBACK_LABEL: Record<LaunchItem["kind"], string> = {
   command: "CMD",
 };
 
+/// The kind's color, as something the tile mixes down. It stays out of the
+/// class list because the mix is per kind and a class cannot carry it.
+const KIND_TINT: Record<LaunchItem["kind"], string> = {
+  exe: "var(--color-kind-exe)",
+  link: "var(--color-kind-link)",
+  folder: "var(--color-kind-folder)",
+  url: "var(--color-kind-url)",
+  command: "var(--color-kind-command)",
+};
+
 interface ItemCardProps {
   item: LaunchItem;
   layout: "grid" | "list";
@@ -23,6 +33,9 @@ interface ItemCardProps {
   dragState?: "dragging" | "over";
   /// The current search term, so a result can show why it matched.
   query: string;
+  /// Position in the list. It is what staggers the arrival animation, capped so
+  /// a long list is never still arriving once the user is typing.
+  index: number;
   onClick: () => void;
   onSelect: () => void;
   onPreviewHover: (x: number, y: number) => void;
@@ -95,6 +108,9 @@ export function ItemCard(props: ItemCardProps) {
   };
 
   const notePreview = () => props.item.note?.replace(/\s+/g, " ").trim() ?? "";
+  /// Six rows is as far as the cascade runs: past that the delay would be
+  /// longer than the animation, and the list would arrive after the typing.
+  const rowDelay = () => `${Math.min(props.index, 6) * 12}ms`;
   const hasNote = () => notePreview().length > 0;
   const hasPreviewDetails = () => props.item.kind === "command" || hasNote();
   const compactTargetValue = () => targetValue().replace(/\s+/g, " ").trim();
@@ -109,12 +125,13 @@ export function ItemCard(props: ItemCardProps) {
     return compactPath(value);
   };
 
-  const stateClass = () => {
-    if (props.dragState === "dragging") {
-      return "opacity-40";
-    }
-    return props.subdued ? "opacity-55 hover:opacity-100 focus-visible:opacity-100" : "";
-  };
+  const stateClass = () => (props.dragState === "dragging" ? "opacity-40" : "");
+
+  /// A row in the Unused section goes one step quieter on each line rather than
+  /// the whole row being faded. Whole-row opacity takes the note line — already
+  /// the faintest text — below the point where it can be read at all, and dims
+  /// the icon's kind colour along with it.
+  const toned = (resting: string, subdued: string) => (props.subdued ? subdued : resting);
 
   // Preview positioning rides on mousemove; selection is keyboard and focus only,
   // so hovering never steals the keyboard cursor out from under the user.
@@ -149,14 +166,21 @@ export function ItemCard(props: ItemCardProps) {
 
   const iconTile = (size: "grid" | "list") => (
     <div
-      class={`flex shrink-0 items-center justify-center overflow-hidden rounded-sharp border border-line bg-gradient-to-b from-fill to-inset surface-transition group-hover:scale-105 group-hover:border-signal-line group-hover:shadow-[0_0_18px_-6px_var(--color-signal-glow)] ${
-        size === "grid" ? "h-11 w-11" : "h-9 w-9 self-start"
-      }`}
+      class={`flex shrink-0 items-center justify-center overflow-hidden rounded-sharp border surface-transition group-hover:scale-105 group-hover:shadow-[0_0_18px_-6px_var(--color-signal-glow)] ${
+        props.subdued ? "opacity-60 group-hover:opacity-100" : ""
+      } ${size === "grid" ? "h-11 w-11" : "h-9 w-9 self-start"}`}
+      style={{
+        "border-color": `color-mix(in srgb, ${KIND_TINT[props.item.kind]} 42%, transparent)`,
+        "background-image": `radial-gradient(circle at 50% 118%, color-mix(in srgb, ${KIND_TINT[props.item.kind]} 24%, transparent), transparent 70%), linear-gradient(to bottom, var(--color-fill), var(--color-inset))`,
+      }}
     >
       <Show
         when={iconSrc()}
         fallback={
-          <span class="font-mono text-micro text-fg-subtle">
+          <span
+            class="font-mono text-micro"
+            style={{ color: KIND_TINT[props.item.kind] }}
+          >
             {FALLBACK_LABEL[props.item.kind]}
           </span>
         }
@@ -200,9 +224,10 @@ export function ItemCard(props: ItemCardProps) {
           aria-haspopup="menu"
           class={`group relative grid min-h-[124px] w-full min-w-0 grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-hidden rounded-sharp border bg-raised px-3 py-3 text-left surface-transition hover:-translate-y-0.5 ${
             props.active
-              ? "border-signal-line shadow-select"
-              : "border-line hover:border-line-strong hover:bg-fill"
+              ? "border-signal-line shadow-select hover:bg-raised-hover"
+              : "border-line hover:border-line-strong hover:bg-raised-hover"
           } ${stateClass()}`}
+          style={{ "--row-delay": rowDelay() }}
         >
           {overlays()}
 
@@ -254,9 +279,10 @@ export function ItemCard(props: ItemCardProps) {
         onDrop={props.onDrop}
         data-item-id={props.item.id}
         aria-haspopup="menu"
-        class={`group relative grid w-full min-w-0 grid-cols-[36px_minmax(0,1fr)_72px] items-stretch gap-3 border-b border-line px-2 py-2 text-left surface-transition last:border-b-0 ${
+        class={`group relative grid w-full min-w-0 grid-cols-[36px_minmax(0,1fr)_72px] items-stretch gap-3 row-rule border-b px-2 py-2 text-left surface-transition last:border-b-0 ${
           hasNote() ? "min-h-[72px]" : "min-h-[56px]"
         } ${props.active ? "bg-fill-strong" : "hover:bg-fill"} ${stateClass()}`}
+        style={{ "--row-delay": rowDelay() }}
       >
         {overlays()}
 
@@ -271,7 +297,12 @@ export function ItemCard(props: ItemCardProps) {
             }`}
           >
             <div class="flex min-w-0 items-center gap-2">
-              <div class="truncate text-body font-medium text-fg transition-colors group-hover:text-white">
+              <div
+                class={`truncate text-body font-medium transition-colors group-hover:text-white ${toned(
+                  "text-fg",
+                  "text-fg-muted",
+                )}`}
+              >
                 <Highlighted text={props.item.name} query={props.query} />
               </div>
               <Show when={props.item.isFavorite}>
@@ -280,7 +311,12 @@ export function ItemCard(props: ItemCardProps) {
               </Show>
             </div>
 
-            <div class="truncate font-mono text-data text-fg-subtle transition-colors group-hover:text-fg-muted">
+            <div
+              class={`truncate font-mono text-data transition-colors group-hover:text-fg-muted ${toned(
+                "text-fg-subtle",
+                "text-fg-faint",
+              )}`}
+            >
               <Highlighted text={listTargetValue()} query={props.query} />
             </div>
 
@@ -297,7 +333,12 @@ export function ItemCard(props: ItemCardProps) {
             hasNote() ? "justify-between" : "justify-center gap-1"
           }`}
         >
-          <div class="font-mono text-meta text-fg-subtle transition-colors group-hover:text-fg-muted">
+          <div
+            class={`font-mono text-meta transition-colors group-hover:text-fg-muted ${toned(
+              "text-fg-subtle",
+              "text-fg-faint",
+            )}`}
+          >
             {launchCountLabel(props.item.launchCount)}
           </div>
           <div class="font-mono text-meta text-fg-faint transition-colors group-hover:text-fg-subtle">

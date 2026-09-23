@@ -1,5 +1,6 @@
 import { For, Show, createEffect, createSignal, onCleanup, onMount } from "solid-js";
 import type { Group } from "../types";
+import { DISCOVERY_VIEW_ID, SYSTEM_VIEWS } from "../lib/views";
 
 interface GroupTabsProps {
   groups: Group[];
@@ -155,16 +156,15 @@ export function GroupTabs(props: GroupTabsProps) {
     </Show>
   );
 
-  const systemTabs: Array<{ id: string | null; label: string }> = [
-    { id: null, label: "My Library" },
-    { id: "__favorites__", label: "Favorites" },
-    { id: "__recent__", label: "Recent" },
-    {
-      id: "__discovery__",
-      label:
-        props.discoveryCount > 0 ? `Discovery (${props.discoveryCount})` : "Discovery",
-    },
-  ];
+  // Built from the same list the left and right keys walk, so there can be no
+  // tab the keyboard cannot reach.
+  const systemTabs = SYSTEM_VIEWS.map((view) => ({
+    id: view.id,
+    label:
+      view.id === DISCOVERY_VIEW_ID && props.discoveryCount > 0
+        ? `${view.label} (${props.discoveryCount})`
+        : view.label,
+  }));
 
   return (
     <div class="flex min-w-0 items-center border-b border-line">
@@ -267,13 +267,14 @@ export function GroupTabs(props: GroupTabsProps) {
                 onClick={startCreate}
                 title="New group"
                 aria-label="New group"
-                class="ml-1 flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-sharp border border-line text-fg-muted transition-colors duration-100 hover:bg-fill hover:text-fg"
+                class="flex h-[26px] shrink-0 items-center justify-center rounded-sharp px-2 text-fg-subtle transition-colors duration-100 hover:bg-fill hover:text-fg-muted"
               >
-                {/* Outlined rather than a bare glyph: in a row of plain text tabs
-                    a lone "+" reads as stray punctuation, while the same shape
-                    the app already uses for chips and the hotkey key reads as a
-                    control. Sized in viewBox units so the stroke lands on a
-                    crisp 1.5px. */}
+                {/* Bare, at the size of a tab and in the same colour as the
+                    tabs that are not selected. A stroked square was the only
+                    box in a row of plain text, and its glyph was brighter than
+                    the group names beside it — the control leading the content.
+                    The app's other add affordances are plain "+ App" / "+ Folder"
+                    for the same reason. */}
                 <svg
                   viewBox="0 0 16 16"
                   class="h-3 w-3"

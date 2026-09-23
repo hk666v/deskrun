@@ -7,20 +7,26 @@
  * Everything in src/ reads from these; do not reintroduce raw hex/opacity values.
  */
 @theme {
-  /* Surfaces: 3 steps */
+  /* Surfaces: 3 steps, plus the one a card takes under the pointer. `fill` is a
+     translucent wash and cannot stand in for it: it replaces the card's own
+     colour rather than layering over it, and white at 3.5% over the panel is
+     the same brightness as `raised` — a hover that changes nothing. */
   --color-canvas: #0a0c10;
   --color-surface: #10141b;
   --color-raised: #161b24;
+  --color-raised-hover: #252c38;
 
   /* Hairlines: 2 steps */
   --color-line: rgb(255 255 255 / 0.07);
   --color-line-strong: rgb(255 255 255 / 0.13);
 
-  /* Text: 4 levels */
+  /* Text: 4 levels. The faintest one carries the note line and the timestamps,
+     which are quiet by intent but still have to be readable: at 26% white it
+     was 2.3:1 against the panel, below the 3:1 floor for text this size. */
   --color-fg: rgb(255 255 255 / 0.93);
   --color-fg-muted: rgb(255 255 255 / 0.62);
   --color-fg-subtle: rgb(255 255 255 / 0.44);
-  --color-fg-faint: rgb(255 255 255 / 0.26);
+  --color-fg-faint: rgb(255 255 255 / 0.34);
 
   /* Fills: 4 levels */
   --color-fill: rgb(255 255 255 / 0.035);
@@ -44,6 +50,16 @@
   /* Danger: destructive actions and errors only */
   --color-danger: #f4736f;
   --color-danger-soft: rgb(244 115 111 / 0.12);
+
+  /* Item kinds. A list of near-identical rows is hard to scan, and the kind is
+     the one difference that is worth seeing before reading a line. These never
+     mark state — the accent does that — so they are mixed in at low strength
+     and stay out of the way of selection. */
+  --color-kind-exe: #6ea8fe;
+  --color-kind-link: #c084fc;
+  --color-kind-folder: #e8c06a;
+  --color-kind-url: #4fd1c5;
+  --color-kind-command: #9ed94c;
 
   /* Windows-native families — no webfonts, so no memory cost */
   --font-sans: "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", system-ui,
@@ -147,6 +163,25 @@
   }
 }
 
+/* On every summon the rows arrive in a short cascade behind the panel. The
+   per-row delay is capped where the card writes it, so a long list is never
+   still arriving after the user has started typing. */
+@keyframes row-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+[data-summon="entering"] [data-item-id] {
+  animation: row-in 190ms var(--ease-sharp) backwards;
+  animation-delay: var(--row-delay, 0ms);
+}
+
 /* Tailwind 4 has no --z-* theme namespace, so the layer ladder lives here. */
 @utility z-sticky {
   z-index: 20;
@@ -198,6 +233,12 @@
     var(--color-signal-wash),
     transparent 100%
   );
+}
+
+/* Row separators fade out to the right rather than running the full width, so a
+   screen of stacked rows reads as a list instead of as a table. */
+@utility row-rule {
+  border-image: linear-gradient(to right, var(--color-line), transparent 72%) 1;
 }
 
 @layer base {

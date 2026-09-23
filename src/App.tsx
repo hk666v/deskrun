@@ -42,7 +42,9 @@ import { SearchBar } from "./components/SearchBar";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { copyText } from "./lib/clipboard";
 import { buildCommandPreview } from "./lib/command-preview";
+import { displayOrder } from "./lib/item-order";
 import { buildQueryActions, type QueryAction } from "./lib/query-actions";
+import { DISCOVERY_VIEW_ID, FAVORITES_VIEW_ID, RECENT_VIEW_ID, stepView, viewIds } from "./lib/views";
 import { revealItemLocation } from "./lib/location";
 import {
   buildSearchIndexEntry,
@@ -98,9 +100,6 @@ const DEFAULT_CONFIG_DIRECTORY: ConfigDirectoryInfo = {
   usingCustomPath: false,
 };
 
-const FAVORITES_VIEW_ID = "__favorites__";
-const RECENT_VIEW_ID = "__recent__";
-const DISCOVERY_VIEW_ID = "__discovery__";
 const DEFAULT_DISCOVERY_SCAN_OPTIONS: DiscoveryScanOptions = {
   startMenu: true,
   desktop: true,
@@ -117,6 +116,25 @@ function describeError(error: unknown) {
     return error.message;
   }
   return String(error);
+}
+
+/// Whether left or right belongs to a text field's caret rather than to the
+/// launcher. The caret keeps the key while there is text on the side it would
+/// move towards, or while a selection is up; only a caret already sitting at
+/// that end of the field hands it over.
+function caretOwnsKey(target: HTMLElement | null, direction: "left" | "right") {
+  const field = target?.closest("input, textarea, [contenteditable='true']");
+  if (!field) {
+    return false;
+  }
+
+  if (field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement) {
+    const start = field.selectionStart ?? 0;
+    const end = field.selectionEnd ?? 0;
+    return start !== end || (direction === "left" ? start > 0 : end < field.value.length);
+  }
+
+  return true;
 }
 
 function App() {
@@ -243,6 +261,10 @@ function App() {
       currentGroupId() !== DISCOVERY_VIEW_ID,
   );
 
+  /// The tabs in the order they are drawn, which is the order the left and
+  /// right keys walk.
+  const viewOrder = createMemo(() => viewIds(groups()));
+
   const syncSelection = (nextItems: LaunchItem[]) => {
     if (currentGroupId() === DISCOVERY_VIEW_ID) {
       setSelectedItemId(null);
@@ -254,8 +276,11 @@ function App() {
       return;
     }
 
-    if (!nextItems.some((item) => item.id === selectedItemId())) {
-      setSelectedItemId(nextItems[0].id);
+    // The first item on screen, which is the first of the drawn order rather
+    // than of the list it was built from.
+    const ordered = displayOrder(nextItems, shouldSectionListItems());
+    if (!ordered.some((item) => item.id === selectedItemId())) {
+      setSelectedItemId(ordered[0].id);
     }
   };
 
@@ -524,6 +549,20 @@ function App() {
     }, 180);
   };
 
+  // The preview is only ever up because the pointer is resting on a card, so it
+  // is tied to the list rather than trusted until the mouse moves. Switching
+  // views with the keyboard, typing a query, deleting an item: none of those
+  // move the mouse, and every one of them moves the ground under it — leaving
+  // the panel describing a row that has gone, or that something else has taken
+  // the place of.
+  createEffect<LaunchItem[] | undefined>((previous) => {
+    const items = visibleItems();
+    if (previous !== undefined && previous !== items) {
+      clearHoverPreview();
+    }
+    return items;
+  });
+
   const handleLaunch = async (item: LaunchItem) => {
     setContextMenu(null);
     try {
@@ -677,7 +716,10 @@ function App() {
   };
 
   const handleReorder = async (fromId: string, toId: string) => {
-    const scoped = visibleItems();
+    // Written against the drawn order too: an item dropped between two
+    // neighbours has to land between them, and the stored order is not what the
+    // user was looking at.
+    const scoped = displayOrder(visibleItems(), shouldSectionListItems());
     const fromIndex = scoped.findIndex((item) => item.id === fromId);
     const toIndex = scoped.findIndex((item) => item.id === toId);
     if (fromIndex < 0 || toIndex < 0) {
@@ -716,7 +758,11 @@ function App() {
       return;
     }
 
-    const collection = visibleItems();
+    // The walk follows the order the items are drawn in, not the order they are
+    // stored in: the list is drawn in sections, and a favourite halfway down the
+    // stored order is drawn at the top, so the raw order skips it and comes back
+    // to it from the other end. See `displayOrder`.
+    const collection = displayOrder(visibleItems(), shouldSectionListItems());
     if (collection.length === 0) {
       return;
     }
@@ -733,15 +779,10 @@ function App() {
     setSelectedItemId(collection[nextIndex].id);
   };
 
-  const selectionStep = (direction: "horizontal" | "vertical", delta: number) => {
-    if (settings().displayMode === "list") {
-      return direction === "vertical" ? delta : 0;
-    }
-
-    // Vertical moves must jump exactly one rendered row, which is however many
-    // columns the grid actually has at the current window width.
-    return direction === "vertical" ? delta * gridColumns() : delta;
-  };
+  /// A vertical move has to jump exactly one rendered row, which is however many
+  /// columns the grid actually has at the current window width.
+  const verticalStep = (delta: number) =>
+    settings().displayMode === "list" ? delta : delta * gridColumns();
 
   const hideLauncher = async () => {
     setEditorState(null);
@@ -812,23 +853,23 @@ function App() {
       return;
     }
 
-    // Left/right belong to the caret in any text field. Up/down belong to the
-    // results, because a single-line field has no vertical caret to move — but
-    // a textarea moves between lines and a select or number input steps its
-    // value, so those keep theirs.
-    const inTextEntry = Boolean(
-      target?.closest("input, textarea, select, [contenteditable='true']"),
-    );
+    // Left and right belong to the caret until it runs out of text — a caret in
+    // the middle of a query is where a typo gets fixed — and past that they walk
+    // the tab strip, which is the direction the tabs are laid out in. Up/down
+    // belong to the results, because a single-line field has no vertical caret
+    // to move — but a textarea moves between lines and a select or number input
+    // steps its value, so those keep theirs.
     const ownsVerticalArrows = Boolean(
       target?.closest("textarea, select, input[type='number']"),
     );
 
     if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
-      if (inTextEntry) {
+      const forward = event.key === "ArrowRight" ? 1 : -1;
+      if (caretOwnsKey(target, forward > 0 ? "right" : "left")) {
         return;
       }
       event.preventDefault();
-      moveSelection(selectionStep("horizontal", event.key === "ArrowRight" ? 1 : -1));
+      setCurrentGroupId(stepView(viewOrder(), currentGroupId(), forward));
       return;
     }
 
@@ -837,7 +878,7 @@ function App() {
         return;
       }
       event.preventDefault();
-      moveSelection(selectionStep("vertical", event.key === "ArrowDown" ? 1 : -1));
+      moveSelection(verticalStep(event.key === "ArrowDown" ? 1 : -1));
       return;
     }
 
