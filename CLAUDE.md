@@ -53,7 +53,7 @@ src-tauri/
 
 ### 数据流
 - `App.tsx` 是唯一的状态持有者，所有 `createSignal` 在 App 内定义
-- 通过 `getBootstrapData()` 一次性加载全部初始数据（items + groups + settings + windowSizeLimits + configDirectory）
+- 通过 `getBootstrapData()` 一次性加载全部初始数据（items + groups + settings + configDirectory + startupWarning）
 - 每个修改操作后通过返回值局部更新对应 signal，避免全量刷新
 - 搜索索引 `searchIndex` 是 `createMemo`，自动响应 `items()` 变化
 
@@ -64,6 +64,9 @@ src-tauri/
   - 首字母（`pinyinInitialsName`、`pinyinInitialsCombined`）
 - 评分层级：精确 > 前缀 > 包含，名称 > 全拼 > 备注 > 组合 > 首字母
 - 偏好加权（最高 +50）：isFavorite +14, lastLaunchedAt(7天 +12 / 30天 +8) +6, launchCount(max 12)
+- **搜不到时不留死胡同**：`lib/query-actions.ts` 给出可执行的兜底（打开 URL / 网页搜索 / 进制转换），
+  回车运行第一条。它只在 `visibleItems()` 为空时出现——真实条目永远优先于对查询意图的猜测。
+  裸数字按十进制处理，只有 `0x`/`h` 后缀算十六进制；`1b` 这类有歧义的写法一律不猜
 
 ### 视图模式
 - `grid` 模式：列数由 `ItemGrid` 用 `ResizeObserver` 实测（`auto-fill minmax(200px, 1fr)`），方向键左右 ±1、上下 = 当前实测列数（`App.tsx` 的 `gridColumns` signal）
@@ -85,6 +88,19 @@ src-tauri/
 ### 组件通信
 - 所有回调通过 props 向下传递，没有 context/provider
 - `App.tsx` 定义所有处理函数（`handleLaunch`、`handleDelete`、`handleReorder` 等）
+
+### 全局键盘的分层约定
+`App.tsx` 的 `handleAppKeyDown` 挂在 document 捕获阶段，优先级从高到低：
+
+1. IME 组合中（`isComposing` / keyCode 229）→ 完全放行
+2. 焦点在 `[data-inline-editor]` 内 → 完全放行（内联编辑器自己处理 Enter/Escape）
+3. Escape → 按层关闭：右键菜单 → 对话框 → 设置 → 都没有才隐藏窗口
+4. 有浮层打开 → 放行（浮层拥有键盘）
+5. 焦点在文本输入/`<button>` 内 → 放行
+6. 否则处理方向键与 Enter
+
+**新增内联编辑器时必须加 `data-inline-editor`**，否则在输入框里按 Escape 会直接把整个启动器隐藏，
+而不是取消编辑。
 
 ---
 
@@ -112,6 +128,37 @@ src-tauri/
 ### Discovery
 - 扫描来源：开始菜单、桌面 .lnk、注册表卸载项
 - 返回 `DiscoveryCandidate` 列表，前端勾选后批量导入
+- **`confidence` 表达的是"我们怎么找到这个 target 的"，不是"这个应用有多值得导入"**。
+  它由 `RegistryTargetMatch` 决定（`Declared`/`NameMatch` → medium，`Guessed` → low），
+  不能再用"DisplayIcon 字段是否存在"来推断——残留的 DisplayIcon 会掉进猜测分支却仍被标成 medium
+- **默认只勾选 `high`**（即开始菜单/桌面上 Windows 自己呈现为程序的快捷方式）。注册表来的条目
+  一律默认不选：`Guessed` 那条是在安装目录里随手挑的，可能根本不是主程序
+- `already_exists` 在扫描时算一次，导入后由前端就地更新（后端导入时也会再查一遍兜底）
+
+### 不变量（改动前请先确认没有破坏）
+- **写盘一律走 `storage::write_json`**：它写临时文件 + `sync_all` + `rename`。直接 `fs::write`
+  会让断电/崩溃留下半截 JSON
+- **配置文件解析失败必须隔离**：`read_json` 会把坏文件改名成 `*.corrupt-<时间戳>.json` 并返回
+  `None`。失败绝不能冒泡到 `setup`——`windows_subsystem = "windows"` 下 panic 没有任何输出，
+  用户只会看到"双击了没反应"
+- **打开文件/URL/文件夹一律走 `tauri_plugin_opener`**，不要拼 `cmd /C start` 命令行：cmd 会把
+  目标里的 `&` 当命令分隔符，既是功能 bug（带多个 query 参数的 URL 打不开）也是注入面
+- **提权只能走 `ShellExecuteW` 的 `runas` 动词**（`launcher::elevate_target`）：已经运行的进程无法
+  自行提权，也没有别的办法触发 UAC。它的失败是小整数错误码而非 last-error，5 表示用户拒绝了 UAC，
+  要明确告诉用户而不是假装启动成功
+- **热键先注册新的、成功后再注销旧的**（`hotkey::register_hotkey`）。顺序反了会让用户改一次
+  热键就彻底失联
+- **耗时命令必须 `spawn_blocking`**：Tauri 的 `#[tauri::command]` 默认在 IPC 路径上同步执行，
+  扫描注册表和批量提取图标会冻住整个窗口
+- **列表类操作批量写盘**：`create_item` 会写盘，批量导入请用 `create_item_in_memory` 再统一
+  `persist_items()` 一次
+- **改内存前先完成所有可能失败的步骤**：`update_item` 先校验、先解析图标，再落到存储上
+- **窗口尺寸一律用逻辑像素**：`settings.json` 存的是逻辑值，前端传的也是 `innerSize() / scaleFactor`，
+  所以 `WindowSizeLimits` 必须换算成逻辑值（见 `hotkey::window_scale`）。混入物理值会在 150%/200%
+  缩放的显示器上把宽度上限压到接近最小值，表现为"拖不动窗口"
+- **窗口尺寸没有设置项**：靠鼠标拖四边/四角调整，变化由 `sync_window_size` 记录。热区在
+  `LauncherShell` 里是 16px 边 / 20px 角——可见面板外面有 gutter，所以实际落在面板内的只有约 10px，
+  不能再调小
 
 ---
 
@@ -122,8 +169,15 @@ npm install              # 安装前端依赖
 npm run tauri dev        # 开发模式（热重载）
 npm run dev              # 仅前端，在浏览器里跑（走 tauri-shim + dev-fixture，见下）
 npm run tauri build      # 生产构建
+npm run typecheck        # tsc --noEmit，前端类型检查
+npm run test             # typecheck + cargo test
+npm run lint:rust        # clippy，警告视为错误
 npm run clean            # 清理构建产物
 ```
+
+CI（`.github/workflows/ci.yml`）跑 typecheck / vite build / vitest / cargo test / clippy /
+`cargo fmt --check`，外加版本号三处一致性检查。**提交前跑 `npm run test` 和 `npm run lint:rust`**，
+`cargo fmt` 是强制的。
 
 调样式时优先用 `npm run dev`：`tauri-shim.ts` 让 App 在浏览器里能挂载，`dev-fixture.ts` 提供假数据，
 所以 grid/list/discovery/编辑器/设置都能直接看和改，不必等 Rust 重编译。
