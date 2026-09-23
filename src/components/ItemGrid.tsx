@@ -228,9 +228,22 @@ export function ItemGrid(props: ItemGridProps) {
             <For each={sections()}>
               {(section) => (
                 <section class="flex flex-col gap-2">
-                  <div class="flex items-center gap-3 px-1">
+                  {/* The dot carries the same accent a selected row does, so the
+                      heading and what it heads read as one system. Only Pinned
+                      gets the lit one — that section is the one the user built
+                      by hand, and a light on every heading would be decoration.
+                      The rule fades out rather than stopping, which keeps the
+                      heading from looking like a table header. */}
+                  <div class="flex items-center gap-2.5 px-1">
+                    <div
+                      class={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                        section.id === "pinned"
+                          ? "bg-gradient-to-br from-signal to-signal-hot shadow-[0_0_10px_var(--color-signal-glow)]"
+                          : "bg-line-strong"
+                      }`}
+                    />
                     <div class="text-meta font-medium text-fg-muted">{section.title}</div>
-                    <div class="h-px flex-1 bg-line" />
+                    <div class="h-px flex-1 bg-gradient-to-r from-line to-transparent" />
                   </div>
                   <div class="flex flex-col">
                     <For each={section.items}>

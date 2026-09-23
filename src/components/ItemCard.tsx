@@ -126,6 +126,10 @@ export function ItemCard(props: ItemCardProps) {
 
   const overlays = () => (
     <>
+      {/* Under the content, so the light passes beneath the text instead of
+          washing it out. */}
+      <div class="pointer-events-none absolute inset-0 opacity-0 spotlight transition-opacity duration-150 group-hover:opacity-100" />
+
       <Show when={props.active}>
         {/* A row is wide and flat, so the accent is spent as a wash that fades
             out to the right instead of a flat tint: the row still reads as part
@@ -145,7 +149,7 @@ export function ItemCard(props: ItemCardProps) {
 
   const iconTile = (size: "grid" | "list") => (
     <div
-      class={`flex shrink-0 items-center justify-center overflow-hidden rounded-sharp border border-line bg-inset transition-transform duration-100 group-hover:scale-105 ${
+      class={`flex shrink-0 items-center justify-center overflow-hidden rounded-sharp border border-line bg-gradient-to-b from-fill to-inset surface-transition group-hover:scale-105 group-hover:border-signal-line group-hover:shadow-[0_0_18px_-6px_var(--color-signal-glow)] ${
         size === "grid" ? "h-11 w-11" : "h-9 w-9 self-start"
       }`}
     >
@@ -177,7 +181,10 @@ export function ItemCard(props: ItemCardProps) {
           ref={buttonRef}
           draggable={props.draggable}
           onMouseEnter={trackPreview}
-          onMouseMove={trackPreview}
+          onMouseMove={(event) => {
+            trackSpotlight(event.currentTarget, event.clientX, event.clientY);
+            trackPreview(event);
+          }}
           onMouseLeave={props.onPreviewLeave}
           onFocus={props.onSelect}
           onClick={props.onClick}
@@ -230,7 +237,10 @@ export function ItemCard(props: ItemCardProps) {
         ref={buttonRef}
         draggable={props.draggable}
         onMouseEnter={trackPreview}
-        onMouseMove={trackPreview}
+        onMouseMove={(event) => {
+          trackSpotlight(event.currentTarget, event.clientX, event.clientY);
+          trackPreview(event);
+        }}
         onMouseLeave={props.onPreviewLeave}
         onFocus={props.onSelect}
         onClick={props.onClick}
@@ -301,6 +311,15 @@ export function ItemCard(props: ItemCardProps) {
 
 function launchCountLabel(count: number) {
   return count > 0 ? `↑ ${count}` : "—";
+}
+
+/// Writes the pointer's position into the card so the spotlight gradient has
+/// something to read. Custom properties only: nothing re-renders, and the one
+/// layout read is served from the browser's cache between writes.
+function trackSpotlight(element: HTMLElement, clientX: number, clientY: number) {
+  const rect = element.getBoundingClientRect();
+  element.style.setProperty("--spot-x", `${clientX - rect.left}px`);
+  element.style.setProperty("--spot-y", `${clientY - rect.top}px`);
 }
 
 function formatLaunchTimestamp(value: string | null) {

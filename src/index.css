@@ -37,6 +37,9 @@
   /* For the glows: strong enough to read as light, weak enough not to become a
      second surface */
   --color-signal-glow: rgb(255 138 60 / 0.4);
+  /* Between the two: the pointer's spotlight, which has to be visible on a row
+     only 56px tall without turning the row into a highlight */
+  --color-signal-wash: rgb(240 166 58 / 0.22);
 
   /* Danger: destructive actions and errors only */
   --color-danger: #f4736f;
@@ -182,6 +185,18 @@
     120% 90% at 14% -10%,
     var(--color-signal-soft),
     transparent 55%
+  );
+}
+
+/* A light that follows the pointer across a row. Rows in a launcher are long
+   and near-identical, and this is what makes the one under the pointer answer
+   before it is clicked. The coordinates are written by the card as it tracks
+   the mouse; without them it sits in the middle of the row. */
+@utility spotlight {
+  background-image: radial-gradient(
+    170px circle at var(--spot-x, 50%) var(--spot-y, 50%),
+    var(--color-signal-wash),
+    transparent 100%
   );
 }
 
