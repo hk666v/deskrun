@@ -12,6 +12,7 @@ interface SettingsPanelProps {
   onToggleCloseOnLaunch: (value: boolean) => void;
   onToggleFollowCursor: (value: boolean) => void;
   onSetDisplayMode: (value: "grid" | "list") => void;
+  onSetUiScale: (value: number) => void;
   onChooseConfigDirectory: () => void;
   onOpenConfigDirectory: () => void;
   onResetConfigDirectory: () => void;
@@ -23,6 +24,8 @@ interface SettingsPanelProps {
 }
 
 const ROW = "border-b border-line py-2.5 last:border-b-0";
+/// The interface sizes on offer, as webview zoom factors.
+const UI_SCALE_STEPS = [0.9, 1, 1.15, 1.3];
 const GHOST_BUTTON =
   "rounded-sharp border border-line px-2 py-1 text-meta text-fg-muted transition-colors duration-100 hover:bg-fill hover:text-fg disabled:cursor-not-allowed disabled:opacity-45";
 
@@ -117,18 +120,43 @@ export function SettingsPanel(props: SettingsPanelProps) {
                   </p>
                 </div>
                 <div class="flex shrink-0 items-center gap-0.5 rounded-sharp border border-line p-0.5">
-                  <DisplayModeButton
+                  <SegmentButton
                     active={props.settings.displayMode === "grid"}
                     onClick={() => props.onSetDisplayMode("grid")}
                   >
                     Grid
-                  </DisplayModeButton>
-                  <DisplayModeButton
+                  </SegmentButton>
+                  <SegmentButton
                     active={props.settings.displayMode === "list"}
                     onClick={() => props.onSetDisplayMode("list")}
                   >
                     List
-                  </DisplayModeButton>
+                  </SegmentButton>
+                </div>
+              </div>
+
+              {/* Steps rather than a slider: each one is a size the launcher was
+                  looked at, and the endpoints are as far as the layout still
+                  holds together in the default window. */}
+              <div class={`flex flex-col gap-2 ${ROW}`}>
+                <div class="min-w-0">
+                  <p class="text-label text-fg-muted">Interface size</p>
+                  <p class="mt-0.5 text-meta text-fg-subtle">
+                    Text, icons and spacing grow together. A larger size leaves room for
+                    less of the list, so widen the window to match.
+                  </p>
+                </div>
+                <div class="flex shrink-0 items-center gap-0.5 self-start rounded-sharp border border-line p-0.5">
+                  <For each={UI_SCALE_STEPS}>
+                    {(step) => (
+                      <SegmentButton
+                        active={Math.abs(props.settings.uiScale - step) < 0.001}
+                        onClick={() => props.onSetUiScale(step)}
+                      >
+                        {`${Math.round(step * 100)}%`}
+                      </SegmentButton>
+                    )}
+                  </For>
                 </div>
               </div>
 
@@ -355,13 +383,13 @@ function ToggleRow(props: ToggleRowProps) {
   );
 }
 
-interface DisplayModeButtonProps {
+interface SegmentButtonProps {
   active: boolean;
   children: string;
   onClick: () => void;
 }
 
-function DisplayModeButton(props: DisplayModeButtonProps) {
+function SegmentButton(props: SegmentButtonProps) {
   return (
     <button
       type="button"

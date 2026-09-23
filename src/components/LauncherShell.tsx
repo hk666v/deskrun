@@ -1,5 +1,5 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { createSignal, onCleanup, onMount, type JSX } from "solid-js";
+import { createEffect, createSignal, onCleanup, onMount, type JSX } from "solid-js";
 
 /// Matches the directions `startResizeDragging` accepts. The package declares
 /// this union but does not export it, so it is repeated here.
@@ -16,6 +16,12 @@ type ResizeDirection =
 interface LauncherShellProps {
   children: JSX.Element;
   dragging: boolean;
+  /// Where the panel is in its entrance: waiting out of sight with the window,
+  /// playing the entrance, or simply sitting there.
+  summonPhase: "dormant" | "entering" | "idle";
+  /// The webview's zoom level. The layout moves with it, so anything measured
+  /// against the screen has to be converted back to logical pixels first.
+  uiScale: number;
 }
 
 /**
@@ -24,19 +30,25 @@ interface LauncherShellProps {
  * So the visible panel is inset by a small gutter, which is transparent and
  * holds the shadow. When the window is dragged to fill the work area the gutter
  * would read as a seam against the screen edge, so it collapses.
+ *
+ * The zoom shrinks the CSS pixel the viewport is measured in — `innerWidth`
+ * reports fewer of them at 115% — while the screen keeps reporting logical
+ * pixels, so the two are only comparable once the viewport is scaled back up.
  */
-function useFlushToScreenEdge() {
+function useFlushToScreenEdge(scale: () => number) {
   const [flush, setFlush] = createSignal(false);
 
-  onMount(() => {
-    const measure = () => {
-      setFlush(
-        window.innerWidth >= window.screen.availWidth - 4 &&
-          window.innerHeight >= window.screen.availHeight - 4,
-      );
-    };
+  const measure = () => {
+    const zoom = scale();
+    setFlush(
+      window.innerWidth * zoom >= window.screen.availWidth - 4 &&
+        window.innerHeight * zoom >= window.screen.availHeight - 4,
+    );
+  };
 
-    measure();
+  createEffect(measure);
+
+  onMount(() => {
     window.addEventListener("resize", measure);
     onCleanup(() => window.removeEventListener("resize", measure));
   });
@@ -46,7 +58,21 @@ function useFlushToScreenEdge() {
 
 export function LauncherShell(props: LauncherShellProps) {
   const currentWindow = getCurrentWindow();
-  const flush = useFlushToScreenEdge();
+  const flush = useFlushToScreenEdge(() => props.uiScale);
+
+  /// The panel is out of the picture while the window is hidden, so the
+  /// entrance starts from nothing rather than from a frame the show already
+  /// painted. Nothing is lost: the window is hidden at the time.
+  const summonClass = () => {
+    switch (props.summonPhase) {
+      case "dormant":
+        return "opacity-0";
+      case "entering":
+        return "animate-summon";
+      default:
+        return "";
+    }
+  };
 
   const startDrag = async () => {
     await currentWindow.startDragging();
@@ -66,8 +92,10 @@ export function LauncherShell(props: LauncherShellProps) {
       <div
         class={`relative h-full w-full overflow-hidden ${
           flush() ? "" : "rounded-window bg-canvas shadow-float ring-1 ring-line"
-        }`}
+        } ${summonClass()}`}
       >
+        <div class="pointer-events-none absolute inset-0 ambient-glow" />
+
         <div
           class="absolute top-5 right-5 left-5 z-chrome h-8 cursor-move select-none"
           onMouseDown={(event) => {

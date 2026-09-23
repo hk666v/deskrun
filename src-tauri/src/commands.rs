@@ -6,8 +6,9 @@ use crate::{
     app_state::SharedState,
     discovery, hotkey, launcher,
     models::{
-        BootstrapData, CreateItemPayload, DiscoveryCandidate, DiscoveryCandidateImport,
-        DiscoveryScanOptions, Group, LaunchItem, Settings, UpdateItemPayload,
+        normalized_ui_scale, BootstrapData, CreateItemPayload, DiscoveryCandidate,
+        DiscoveryCandidateImport, DiscoveryScanOptions, Group, LaunchItem, Settings,
+        UpdateItemPayload,
     },
 };
 
@@ -286,6 +287,25 @@ pub fn set_follow_cursor_monitor(
     let mut storage = state.lock()?;
     storage
         .set_follow_cursor_monitor(follow)
+        .map_err(|error| format!("{error:#}"))?;
+    bootstrap_data(&app, &storage)
+}
+
+#[tauri::command]
+pub fn set_ui_scale(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+    scale: f64,
+) -> Result<BootstrapData, String> {
+    let normalized = normalized_ui_scale(scale);
+
+    // The zoom is the fallible half, so it goes first: a window that refuses it
+    // must not leave a size on disk that the interface never actually took.
+    hotkey::apply_ui_scale(&app, normalized).map_err(|error| error.to_string())?;
+
+    let mut storage = state.lock()?;
+    storage
+        .set_ui_scale(normalized)
         .map_err(|error| format!("{error:#}"))?;
     bootstrap_data(&app, &storage)
 }

@@ -13,8 +13,19 @@ interface SearchBarProps {
 }
 
 export function SearchBar(props: SearchBarProps) {
+  /// The rule under the field is the only thing on screen that changes while a
+  /// query is being typed, and it is what makes the results below read as an
+  /// answer to it rather than as a list that happens to be short.
+  const searching = () => props.query.trim().length > 0;
+
   return (
-    <div class="flex items-center gap-4 border-b border-line pb-3">
+    <div
+      class={`flex items-center gap-4 border-b pb-3 surface-transition ${
+        searching()
+          ? "border-signal-line shadow-[0_8px_20px_-12px_var(--color-signal-glow)]"
+          : "border-line"
+      }`}
+    >
       <input
         ref={props.inputRef}
         value={props.query}

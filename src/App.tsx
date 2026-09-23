@@ -27,6 +27,7 @@ import {
   setFollowCursorMonitor,
   setHotkey,
   setLaunchOnStartup,
+  setUiScale,
   syncWindowSize,
   toggleFavorite,
   updateItem,
@@ -75,6 +76,10 @@ type HoverPreviewState = {
   y: number;
 } | null;
 
+/// The panel's entrance state: hidden with the window, playing its entrance, or
+/// simply sitting there.
+type SummonPhase = "dormant" | "entering" | "idle";
+
 const DEFAULT_SETTINGS: Settings = {
   hotkey: "Alt+Space",
   launchOnStartup: false,
@@ -84,6 +89,7 @@ const DEFAULT_SETTINGS: Settings = {
   windowWidth: 760,
   windowHeight: 560,
   followCursorMonitor: true,
+  uiScale: 1,
 };
 
 const DEFAULT_CONFIG_DIRECTORY: ConfigDirectoryInfo = {
@@ -130,6 +136,14 @@ function App() {
   const [settingsOpen, setSettingsOpen] = createSignal(false);
   const [dialogBusy, setDialogBusy] = createSignal(false);
   const [draggingExternal, setDraggingExternal] = createSignal(false);
+  /// Drives the entrance animation. The window is hidden and shown rather than
+  /// remounted, so nothing plays on its own.
+  ///
+  /// `dormant` is the state the panel waits in while the window is hidden: the
+  /// show reaches the frontend as an event, which lands a few frames after the
+  /// window is already on screen, so a panel that was still painted would flash
+  /// at full size and then fade in from nothing.
+  const [summonPhase, setSummonPhase] = createSignal<SummonPhase>("dormant");
   const [feedback, setFeedback] = createSignal("");
   const [startupWarning, setStartupWarning] = createSignal("");
   /// Destructive actions queue here so they can be confirmed in the app rather
@@ -152,6 +166,7 @@ function App() {
   let pendingHoverPreview: HoverPreviewState = null;
   let searchInput!: HTMLInputElement;
   let feedbackTimer: number | undefined;
+  let summonTimer: number | undefined;
 
   const searchIndex = createMemo(() =>
     items().map((item) => ({
@@ -734,6 +749,9 @@ function App() {
     setContextMenu(null);
     clearHoverPreview();
     await hideMainWindow();
+    // Only once it is off screen: going dormant while the window is still
+    // painted would blink the panel out on the way.
+    setSummonPhase("dormant");
   };
 
   const handleAppKeyDown = async (event: KeyboardEvent) => {
@@ -848,6 +866,7 @@ function App() {
   onMount(async () => {
     let resizeSyncTimer: number | undefined;
     let syncingResize = false;
+    let summonListenerReady = false;
     const unlisteners: Array<() => void> = [];
 
     // One listener failing to register must not stop the app from loading its
@@ -866,6 +885,7 @@ function App() {
       currentWindow.onFocusChanged(async ({ payload }) => {
         if (!payload && !dialogBusy()) {
           await currentWindow.hide();
+          setSummonPhase("dormant");
         }
       }),
     );
@@ -887,12 +907,26 @@ function App() {
       }),
     );
 
-    await register(() =>
-      listen("deskrun://focus-search", () => {
+    await register(async () => {
+      const unlisten = await listen("deskrun://focus-search", () => {
         searchInput?.focus();
         searchInput?.select();
-      }),
-    );
+
+        // The animation only replays if the class leaves the element first, so
+        // it is cleared on a timer rather than left on for the session.
+        setSummonPhase("entering");
+        window.clearTimeout(summonTimer);
+        summonTimer = window.setTimeout(() => setSummonPhase("idle"), 240);
+      });
+      summonListenerReady = true;
+      return unlisten;
+    });
+
+    // Nothing summons a window in the browser preview, so the panel would wait
+    // behind an invisible window forever during `npm run dev`.
+    if (!summonListenerReady) {
+      setSummonPhase("idle");
+    }
 
     await register(() =>
       currentWindow.onResized(async () => {
@@ -935,6 +969,7 @@ function App() {
       clearHoverPreview();
       unlisteners.forEach((unlisten) => unlisten());
       window.clearTimeout(resizeSyncTimer);
+      window.clearTimeout(summonTimer);
       document.removeEventListener("keydown", handleAppKeyDown, true);
     });
   });
@@ -944,7 +979,11 @@ function App() {
   });
 
   return (
-    <LauncherShell dragging={draggingExternal()}>
+    <LauncherShell
+      dragging={draggingExternal()}
+      summonPhase={summonPhase()}
+      uiScale={settings().uiScale}
+    >
       <div class="flex h-full flex-col gap-4">
         {/* The wordmark and the field under it are one block, so the space
             between them is theirs to set. Left to the column's uniform gap the
@@ -954,7 +993,12 @@ function App() {
             LauncherShell covers this row plus the gap under it. */}
         <div class="flex shrink-0 flex-col gap-2">
           <div class="flex h-6 items-center select-none">
-            <h1 class="text-display font-semibold tracking-tight text-fg">DeskRun</h1>
+            {/* The wordmark is the one place the accent is allowed to be purely
+                decorative: it is where the eye lands first, and a lit name
+                reads as "this thing is on". */}
+            <h1 class="bg-gradient-to-r from-fg to-signal bg-clip-text text-display font-semibold tracking-tight text-transparent drop-shadow-[0_0_18px_var(--color-signal-soft)]">
+              DeskRun
+            </h1>
           </div>
 
           {/* Startup problems such as "the hotkey was taken" are not transient, so
@@ -1228,6 +1272,12 @@ function App() {
             applySettingsResponse(await setDisplayMode(value));
             notify(value === "list" ? "List view enabled" : "Grid view enabled");
           }, "Could not switch the view")
+        }
+        onSetUiScale={(value) =>
+          run(async () => {
+            applySettingsResponse(await setUiScale(value));
+            notify(`Interface at ${Math.round(value * 100)}%`);
+          }, "Could not change the interface size")
         }
         onChooseConfigDirectory={() =>
           run(async () => {

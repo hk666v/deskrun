@@ -43,6 +43,8 @@ export interface Settings {
   windowY?: number | null;
   /** Open on the monitor under the pointer, centred, rather than reusing the saved position. */
   followCursorMonitor: boolean;
+  /** Interface scale, applied as a webview zoom. 1 is the designed size. */
+  uiScale: number;
 }
 
 export interface ConfigDirectoryInfo {

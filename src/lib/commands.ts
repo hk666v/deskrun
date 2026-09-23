@@ -92,6 +92,10 @@ export function setFollowCursorMonitor(follow: boolean) {
   return invoke<BootstrapData>("set_follow_cursor_monitor", { follow });
 }
 
+export function setUiScale(scale: number) {
+  return invoke<BootstrapData>("set_ui_scale", { scale });
+}
+
 export function setDisplayMode(displayMode: "grid" | "list") {
   return invoke<BootstrapData>("set_display_mode", { displayMode });
 }

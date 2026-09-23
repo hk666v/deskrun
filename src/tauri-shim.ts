@@ -40,8 +40,9 @@ if (import.meta.env.DEV && !window.__TAURI_INTERNALS__) {
   let nextCallbackId = 0;
   let displayMode: "grid" | "list" = "list";
   let followCursorMonitor = true;
+  let uiScale = 1;
 
-  const bootstrap = () => fixtureBootstrap(displayMode, followCursorMonitor);
+  const bootstrap = () => fixtureBootstrap(displayMode, followCursorMonitor, uiScale);
 
   const handlers: Record<string, (args: Record<string, unknown>) => unknown> = {
     get_bootstrap_data: bootstrap,
@@ -55,6 +56,13 @@ if (import.meta.env.DEV && !window.__TAURI_INTERNALS__) {
     set_close_on_launch: bootstrap,
     set_follow_cursor_monitor: (args) => {
       followCursorMonitor = Boolean(args.follow);
+      return bootstrap();
+    },
+    // Recorded but not applied: the real window zooms its webview, and a browser
+    // has no equivalent that would not misrepresent the layout. The setting
+    // round-trips here so the panel behaves; its effect shows up in `tauri dev`.
+    set_ui_scale: (args) => {
+      uiScale = Number(args.scale);
       return bootstrap();
     },
     sync_window_size: () => bootstrap().settings,

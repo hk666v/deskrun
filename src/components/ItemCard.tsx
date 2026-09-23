@@ -127,17 +127,25 @@ export function ItemCard(props: ItemCardProps) {
   const overlays = () => (
     <>
       <Show when={props.active}>
-        <div class="pointer-events-none absolute inset-y-0 left-0 w-[2px] bg-signal" />
+        {/* A row is wide and flat, so the accent is spent as a wash that fades
+            out to the right instead of a flat tint: the row still reads as part
+            of the list, and the eye is pulled to the edge the mark is on. A
+            card is a box, so there it is the border and the lift that carry the
+            selection. */}
+        <Show when={props.layout === "list"}>
+          <div class="pointer-events-none absolute inset-0 bg-gradient-to-r from-signal-soft to-transparent" />
+        </Show>
+        <div class="pointer-events-none absolute inset-y-0 left-0 w-[2px] bg-gradient-to-b from-signal to-signal-hot shadow-[0_0_14px_var(--color-signal-glow)]" />
       </Show>
       <Show when={props.dragState === "over"}>
-        <div class="pointer-events-none absolute inset-x-0 top-0 h-[2px] bg-signal" />
+        <div class="pointer-events-none absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-signal to-signal-hot" />
       </Show>
     </>
   );
 
   const iconTile = (size: "grid" | "list") => (
     <div
-      class={`flex shrink-0 items-center justify-center overflow-hidden rounded-sharp border border-line bg-inset ${
+      class={`flex shrink-0 items-center justify-center overflow-hidden rounded-sharp border border-line bg-inset transition-transform duration-100 group-hover:scale-105 ${
         size === "grid" ? "h-11 w-11" : "h-9 w-9 self-start"
       }`}
     >
@@ -183,8 +191,10 @@ export function ItemCard(props: ItemCardProps) {
           onDrop={props.onDrop}
           data-item-id={props.item.id}
           aria-haspopup="menu"
-          class={`group relative grid min-h-[124px] w-full min-w-0 grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-hidden rounded-sharp border bg-raised px-3 py-3 text-left transition-colors duration-100 ${
-            props.active ? "border-signal-line" : "border-line hover:border-line-strong"
+          class={`group relative grid min-h-[124px] w-full min-w-0 grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-hidden rounded-sharp border bg-raised px-3 py-3 text-left surface-transition hover:-translate-y-0.5 ${
+            props.active
+              ? "border-signal-line shadow-select"
+              : "border-line hover:border-line-strong hover:bg-fill"
           } ${stateClass()}`}
         >
           {overlays()}
@@ -234,7 +244,7 @@ export function ItemCard(props: ItemCardProps) {
         onDrop={props.onDrop}
         data-item-id={props.item.id}
         aria-haspopup="menu"
-        class={`group relative grid w-full min-w-0 grid-cols-[36px_minmax(0,1fr)_72px] items-stretch gap-3 border-b border-line px-2 py-2 text-left transition-colors duration-100 last:border-b-0 ${
+        class={`group relative grid w-full min-w-0 grid-cols-[36px_minmax(0,1fr)_72px] items-stretch gap-3 border-b border-line px-2 py-2 text-left surface-transition last:border-b-0 ${
           hasNote() ? "min-h-[72px]" : "min-h-[56px]"
         } ${props.active ? "bg-fill-strong" : "hover:bg-fill"} ${stateClass()}`}
       >

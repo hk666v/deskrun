@@ -151,7 +151,7 @@ export function GroupTabs(props: GroupTabsProps) {
 
   const activeUnderline = (active: boolean) => (
     <Show when={active}>
-      <div class="pointer-events-none absolute inset-x-0 bottom-0 h-[2px] bg-signal" />
+      <div class="pointer-events-none absolute inset-x-0 bottom-0 h-[2px] animate-underline bg-gradient-to-r from-signal to-signal-hot shadow-[0_0_14px_var(--color-signal-glow)]" />
     </Show>
   );
 

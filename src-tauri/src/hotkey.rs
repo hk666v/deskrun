@@ -84,9 +84,27 @@ fn flush_settings_to_disk(app: &AppHandle) {
     let _ = storage.flush_settings();
 }
 
+/// The interface size, applied as a webview zoom rather than as CSS: it moves
+/// the CSS pixel itself, so `vh`/`vw` and every fixed px size in the layout
+/// follow it without any of them having to be recomputed by hand. 1.0 is the
+/// designed size.
+pub fn apply_ui_scale(app: &AppHandle, scale: f64) -> Result<()> {
+    main_window(app)?.set_zoom(scale)?;
+    Ok(())
+}
+
 pub fn show_main_window(app: &AppHandle) -> Result<()> {
     let window = main_window(app)?;
     let settings = current_settings(app);
+
+    // Re-applied on every show, because the scale is only worth anything on a
+    // live webview: this is where a setting changed while the window was hidden
+    // — and a webview that was recreated — gets picked up. The window is still
+    // invisible here, so the interface never renders at the wrong size first.
+    if let Some(scale) = settings.as_ref().map(|value| value.ui_scale) {
+        let _ = window.set_zoom(scale);
+    }
+
     place_window_for_display(app, &window, settings.as_ref())?;
     window.show()?;
     let _ = window.unminimize();

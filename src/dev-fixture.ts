@@ -165,6 +165,7 @@ export const fixtureItems: LaunchItem[] = [
 export function fixtureBootstrap(
   displayMode: Settings["displayMode"] = "list",
   followCursorMonitor = true,
+  uiScale = 1,
 ): BootstrapData {
   return {
     // Copies, not the arrays themselves: the shim's mutating handlers push into
@@ -183,6 +184,7 @@ export function fixtureBootstrap(
       windowX: null,
       windowY: null,
       followCursorMonitor,
+      uiScale,
     },
     configDirectory: {
       currentPath: "C:\\Users\\Administrator\\AppData\\Roaming\\com.deskrun.desktop",

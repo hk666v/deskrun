@@ -12,9 +12,9 @@ use uuid::Uuid;
 use crate::{
     icons,
     models::{
-        BootstrapData, ConfigDirectoryInfo, CreateItemPayload, DiscoveryCandidateImport, Group,
-        IconSource, LaunchItem, LaunchItemKind, PersistedItems, Settings, UpdateItemPayload,
-        WindowSizeLimits,
+        normalized_ui_scale, BootstrapData, ConfigDirectoryInfo, CreateItemPayload,
+        DiscoveryCandidateImport, Group, IconSource, LaunchItem, LaunchItemKind, PersistedItems,
+        Settings, UpdateItemPayload, WindowSizeLimits,
     },
 };
 
@@ -242,6 +242,13 @@ impl StorageState {
 
     pub fn set_follow_cursor_monitor(&mut self, follow: bool) -> Result<()> {
         self.settings.follow_cursor_monitor = follow;
+        self.persist_settings()
+    }
+
+    /// Stores the scale the caller already clamped and applied, so the number on
+    /// disk is the one the interface is actually running at.
+    pub fn set_ui_scale(&mut self, scale: f64) -> Result<()> {
+        self.settings.ui_scale = normalized_ui_scale(scale);
         self.persist_settings()
     }
 
@@ -720,6 +727,10 @@ impl StorageState {
         if self.settings.display_mode != "grid" && self.settings.display_mode != "list" {
             self.settings.display_mode = "grid".to_string();
         }
+
+        // A scale that would make the window unusable is not worth honouring:
+        // the interface has no way back to a sane size from inside itself.
+        self.settings.ui_scale = normalized_ui_scale(self.settings.ui_scale);
 
         self.items_data.groups.sort_by_key(|group| group.sort_order);
         for (index, group) in self.items_data.groups.iter_mut().enumerate() {

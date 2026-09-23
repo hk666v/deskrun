@@ -74,6 +74,8 @@ pub struct Settings {
     /// Open on whichever monitor the pointer is on, centred, instead of reusing
     /// the remembered position. On a single monitor the two are the same.
     pub follow_cursor_monitor: bool,
+    /// Interface scale, applied as a webview zoom. 1.0 is the designed size.
+    pub ui_scale: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -99,6 +101,21 @@ pub const MIN_WINDOW_WIDTH: u32 = 760;
 pub const MIN_WINDOW_HEIGHT: u32 = 560;
 pub const MAX_WINDOW_WIDTH: u32 = 1400;
 
+/// The interface setting offers 90% to 130%. The range is a little wider than
+/// the offered steps so a hand-edited config is honoured rather than snapped to
+/// a preset, and anything outside it — including an infinity or a NaN that
+/// survived a bad file — falls back to the designed size instead.
+pub const MIN_UI_SCALE: f64 = 0.85;
+pub const MAX_UI_SCALE: f64 = 1.4;
+
+pub fn normalized_ui_scale(scale: f64) -> f64 {
+    if !scale.is_finite() {
+        return 1.0;
+    }
+
+    scale.clamp(MIN_UI_SCALE, MAX_UI_SCALE)
+}
+
 impl Default for Settings {
     fn default() -> Self {
         Self {
@@ -112,6 +129,7 @@ impl Default for Settings {
             window_x: None,
             window_y: None,
             follow_cursor_monitor: true,
+            ui_scale: 1.0,
         }
     }
 }
@@ -205,4 +223,36 @@ pub struct DiscoveryCandidateImport {
 pub struct PersistedItems {
     pub items: Vec<LaunchItem>,
     pub groups: Vec<Group>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_scale_inside_the_range_is_left_alone() {
+        assert_eq!(normalized_ui_scale(1.15), 1.15);
+    }
+
+    #[test]
+    fn a_scale_outside_the_range_is_pulled_back_in() {
+        assert_eq!(normalized_ui_scale(0.1), MIN_UI_SCALE);
+        assert_eq!(normalized_ui_scale(4.0), MAX_UI_SCALE);
+    }
+
+    #[test]
+    fn a_scale_that_is_not_a_number_falls_back_to_the_designed_size() {
+        assert_eq!(normalized_ui_scale(f64::NAN), 1.0);
+        assert_eq!(normalized_ui_scale(f64::INFINITY), 1.0);
+        assert_eq!(normalized_ui_scale(f64::NEG_INFINITY), 1.0);
+    }
+
+    #[test]
+    fn settings_written_before_the_scale_existed_load_at_the_designed_size() {
+        // `#[serde(default)]` on the struct is what makes an older settings.json
+        // load at all; this pins the value it lands on.
+        let settings: Settings =
+            serde_json::from_str(r#"{"hotkey":"Alt+Space","windowWidth":760}"#).unwrap();
+        assert_eq!(settings.ui_scale, 1.0);
+    }
 }
