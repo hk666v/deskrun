@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check:
+    # Windows because the backend calls the Win32 API directly, and the only
+    # supported target is Windows 11.
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      # `npm run build` only runs Vite and does not type check, so this is the
+      # step that actually catches type errors.
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Frontend tests
+        run: npm run test:js
+
+      - name: Rust tests
+        run: npm run test:rust
+
+      - name: Rust lints
+        run: npm run lint:rust
+
+      - name: Rust formatting
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+
+      # The version lives in three files. Nothing else keeps them in step.
+      - name: Versions agree
+        shell: pwsh
+        run: |
+          $cargo = (Select-String -Path src-tauri/Cargo.toml -Pattern '^version = "(.+)"').Matches[0].Groups[1].Value
+          $tauri = (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          $npm = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          if ($cargo -ne $tauri -or $cargo -ne $npm) {
+            Write-Error "Version mismatch: Cargo.toml=$cargo tauri.conf.json=$tauri package.json=$npm"
+          }
+          Write-Host "All three report $cargo"
