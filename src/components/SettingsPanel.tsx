@@ -10,6 +10,7 @@ interface SettingsPanelProps {
   onSetHotkey: (value: string) => void;
   onToggleStartup: (value: boolean) => void;
   onToggleCloseOnLaunch: (value: boolean) => void;
+  onToggleFollowCursor: (value: boolean) => void;
   onSetDisplayMode: (value: "grid" | "list") => void;
   onChooseConfigDirectory: () => void;
   onOpenConfigDirectory: () => void;
@@ -91,6 +92,22 @@ export function SettingsPanel(props: SettingsPanelProps) {
                 checked={props.settings.closeOnLaunch}
                 onChange={props.onToggleCloseOnLaunch}
               />
+
+              <label class={`flex items-center justify-between gap-3 ${ROW}`}>
+                <span class="min-w-0">
+                  <span class="block text-label text-fg-muted">Follow the pointer</span>
+                  <span class="mt-0.5 block text-meta text-fg-subtle">
+                    Open on the monitor the mouse is on, centred. Off reuses the last
+                    position instead.
+                  </span>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={props.settings.followCursorMonitor}
+                  onChange={(event) => props.onToggleFollowCursor(event.currentTarget.checked)}
+                  class="h-3.5 w-3.5 shrink-0 accent-signal"
+                />
+              </label>
 
               <div class={`flex items-center justify-between gap-3 ${ROW}`}>
                 <div class="min-w-0">

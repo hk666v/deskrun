@@ -79,7 +79,8 @@ src-tauri/
 - 文字四档：`fg` / `fg-muted` / `fg-subtle` / `fg-faint`；发丝线 `line` / `line-strong`
 - 字号七档：`text-micro|meta|data|label|body|title|display`（各自内建行高）
 - 圆角三档：`rounded-sharp|panel|window`；z 阶梯用 `z-sticky|chrome|float|scrim|overlay|menu|toast`
-- **只有一个强调色 `signal`（琥珀）**，只用于选中态和唯一主操作；`danger` 仅用于删除和错误
+- **只有一个强调色 `signal`（琥珀）**，只用于选中态、唯一主操作，以及搜索命中高亮；`danger` 仅用于删除和错误。
+  命中高亮是唯一在选中态之外用它地方——不标出匹配位置，拼音搜索的结果看起来就像 bug
 - **机器数据（命令、路径、时间戳）用 `font-mono`**，人类数据用默认 sans
 - **不使用大写加字距的眉标**，层级靠字号/字重/颜色
 - **不使用 `backdrop-filter`**——透明窗口上的模糊会持续消耗 GPU/显存，与 9MB 目标冲突
@@ -95,9 +96,21 @@ src-tauri/
 1. IME 组合中（`isComposing` / keyCode 229）→ 完全放行
 2. 焦点在 `[data-inline-editor]` 内 → 完全放行（内联编辑器自己处理 Enter/Escape）
 3. Escape → 按层关闭：右键菜单 → 对话框 → 设置 → 都没有才隐藏窗口
-4. 有浮层打开 → 放行（浮层拥有键盘）
-5. 焦点在文本输入/`<button>` 内 → 放行
-6. 否则处理方向键与 Enter
+4. 搜索框里的 Enter → 启动选中项；无匹配时执行第一条兜底动作
+5. **Shift+F10 或菜单键 → 打开选中条目的右键菜单**，光标位置取自 `[data-item-id]`
+   对应的卡片（`ItemCard` 的两个布局分支都必须带这个属性）
+6. 有浮层打开 → 放行（浮层拥有键盘）
+7. **方向键的归属要分开判断**（这一步曾经写错，两头都堵死过）：
+   - `←` `→`：在 `input/textarea/select/contenteditable` 里一律放行给光标
+   - `↑` `↓`：**归结果列表**，除非焦点在 `textarea`（换行）、`select` 或 `input[type=number]`（改值）里
+   - 单行输入框没有垂直光标可移动，所以上下键是空着的——启动器最常见的操作就是
+     "打完字按 ↓ 选结果"，把它堵掉等于方向键哪儿都用不了
+8. 焦点在 `<button>` 内 → 只对 Enter 放行（按钮靠原生激活），**方向键仍然处理**。
+   点击分组标签或卡片后焦点停在按钮上，此时方向键必须照常工作
+9. 否则处理 Enter
+
+**右键菜单自己的方向键/回车在 `ItemContextMenu` 内部处理**（`entries` memo 是数据驱动的，
+方向键在其中循环，`aria-activedescendant` 跟随高亮）。菜单打开时会主动获取焦点，关闭后由 App 归还给搜索框。
 
 **新增内联编辑器时必须加 `data-inline-editor`**，否则在输入框里按 Escape 会直接把整个启动器隐藏，
 而不是取消编辑。
@@ -159,6 +172,8 @@ src-tauri/
 - **窗口尺寸没有设置项**：靠鼠标拖四边/四角调整，变化由 `sync_window_size` 记录。热区在
   `LauncherShell` 里是 16px 边 / 20px 角——可见面板外面有 gutter，所以实际落在面板内的只有约 10px，
   不能再调小
+- **窗口位置默认跟随鼠标所在显示器**（`follow_cursor_monitor`，默认开）。双显示器下"记住上次位置"
+  等于启动器永远弹在同一块屏上；只有关掉这个开关才用记住的坐标
 
 ---
 

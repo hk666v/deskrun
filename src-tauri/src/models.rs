@@ -71,6 +71,9 @@ pub struct Settings {
     pub window_height: u32,
     pub window_x: Option<i32>,
     pub window_y: Option<i32>,
+    /// Open on whichever monitor the pointer is on, centred, instead of reusing
+    /// the remembered position. On a single monitor the two are the same.
+    pub follow_cursor_monitor: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -108,6 +111,7 @@ impl Default for Settings {
             window_height: DEFAULT_WINDOW_HEIGHT,
             window_x: None,
             window_y: None,
+            follow_cursor_monitor: true,
         }
     }
 }

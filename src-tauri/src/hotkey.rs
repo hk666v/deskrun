@@ -190,13 +190,26 @@ fn place_window_for_display(
 
     #[cfg(target_os = "windows")]
     {
-        let preferred_position = settings.and_then(saved_window_position).and_then(|(x, y)| {
-            monitor_rect_for_point(x, y, false)
-                .ok()
-                .flatten()
-                .map(|rect| (rect, x, y))
-        });
+        // A launcher should appear where the user is looking, and on two
+        // monitors that is usually not where it last was. The remembered
+        // position is only consulted when following is switched off.
+        let follow_cursor = settings
+            .map(|value| value.follow_cursor_monitor)
+            .unwrap_or(true);
 
+        let preferred_position = if follow_cursor {
+            None
+        } else {
+            settings.and_then(saved_window_position).and_then(|(x, y)| {
+                monitor_rect_for_point(x, y, false)
+                    .ok()
+                    .flatten()
+                    .map(|rect| (rect, x, y))
+            })
+        };
+
+        // `current_monitor_rect` is the one under the pointer, which is exactly
+        // the anchor this needs.
         let monitor = preferred_position
             .map(|(rect, _, _)| rect)
             .unwrap_or(current_monitor_rect()?);

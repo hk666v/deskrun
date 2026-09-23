@@ -87,6 +87,7 @@ export function ItemGrid(props: ItemGridProps) {
       active={item.id === props.activeItemId}
       draggable={props.sortable}
       subdued={subdued}
+      query={props.query}
       dragState={
         draggedId() === item.id ? "dragging" : overId() === item.id ? "over" : undefined
       }

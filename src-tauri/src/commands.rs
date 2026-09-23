@@ -273,7 +273,20 @@ pub fn set_close_on_launch(
     let mut storage = state.lock()?;
     storage
         .set_close_on_launch(close_on_launch)
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| format!("{error:#}"))?;
+    bootstrap_data(&app, &storage)
+}
+
+#[tauri::command]
+pub fn set_follow_cursor_monitor(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+    follow: bool,
+) -> Result<BootstrapData, String> {
+    let mut storage = state.lock()?;
+    storage
+        .set_follow_cursor_monitor(follow)
+        .map_err(|error| format!("{error:#}"))?;
     bootstrap_data(&app, &storage)
 }
 

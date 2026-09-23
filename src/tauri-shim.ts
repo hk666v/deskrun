@@ -39,8 +39,9 @@ if (import.meta.env.DEV && !window.__TAURI_INTERNALS__) {
   const callbacks = new Map<number, (payload: unknown) => void>();
   let nextCallbackId = 0;
   let displayMode: "grid" | "list" = "list";
+  let followCursorMonitor = true;
 
-  const bootstrap = () => fixtureBootstrap(displayMode);
+  const bootstrap = () => fixtureBootstrap(displayMode, followCursorMonitor);
 
   const handlers: Record<string, (args: Record<string, unknown>) => unknown> = {
     get_bootstrap_data: bootstrap,
@@ -52,6 +53,10 @@ if (import.meta.env.DEV && !window.__TAURI_INTERNALS__) {
     set_hotkey: bootstrap,
     set_launch_on_startup: bootstrap,
     set_close_on_launch: bootstrap,
+    set_follow_cursor_monitor: (args) => {
+      followCursorMonitor = Boolean(args.follow);
+      return bootstrap();
+    },
     sync_window_size: () => bootstrap().settings,
     set_config_directory: bootstrap,
     reorder_groups: () => fixtureGroups,

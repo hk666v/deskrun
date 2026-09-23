@@ -41,6 +41,8 @@ export interface Settings {
   windowHeight: number;
   windowX?: number | null;
   windowY?: number | null;
+  /** Open on the monitor under the pointer, centred, rather than reusing the saved position. */
+  followCursorMonitor: boolean;
 }
 
 export interface ConfigDirectoryInfo {

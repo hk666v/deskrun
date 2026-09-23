@@ -24,6 +24,7 @@ import {
   setConfigDirectory,
   setCloseOnLaunch,
   setDisplayMode,
+  setFollowCursorMonitor,
   setHotkey,
   setLaunchOnStartup,
   syncWindowSize,
@@ -82,6 +83,7 @@ const DEFAULT_SETTINGS: Settings = {
   displayMode: "grid",
   windowWidth: 760,
   windowHeight: 560,
+  followCursorMonitor: true,
 };
 
 const DEFAULT_CONFIG_DIRECTORY: ConfigDirectoryInfo = {
@@ -525,6 +527,34 @@ function App() {
     }, "Could not complete that");
   };
 
+  /// Where a keyboard-opened context menu should appear: against the selected
+  /// card, so it lands where the user is already looking.
+  const selectedCardAnchor = () => {
+    const id = selectedItemId();
+    if (!id) {
+      return null;
+    }
+
+    const card = document.querySelector(`[data-item-id="${CSS.escape(id)}"]`);
+    if (!card) {
+      return null;
+    }
+
+    const rect = card.getBoundingClientRect();
+    return { x: rect.left + 12, y: rect.top + 12 };
+  };
+
+  const openSelectedContextMenu = () => {
+    const item = visibleItems().find((entry) => entry.id === selectedItemId());
+    const anchor = selectedCardAnchor();
+    if (!item || !anchor) {
+      return;
+    }
+
+    clearHoverPreview();
+    setContextMenu({ item, x: anchor.x, y: anchor.y });
+  };
+
   /// Enter means "do the obvious thing": launch the highlighted item, or fall
   /// back to the first offered action when nothing matched.
   const hasConfirmation = () =>
@@ -749,15 +779,47 @@ function App() {
       return;
     }
 
+    // Shift+F10 and the Menu key are Windows' shortcut for a context menu. The
+    // grid is keyboard-driven everywhere else, so its actions have to be
+    // reachable without a mouse.
+    if ((event.shiftKey && event.key === "F10") || event.key === "ContextMenu") {
+      event.preventDefault();
+      openSelectedContextMenu();
+      return;
+    }
+
     // Everything below belongs to the launcher surface, so stand down while an
     // overlay is open: the dialog, drawer, or menu owns the keyboard.
     if (editorState() || settingsOpen() || contextMenu()) {
       return;
     }
 
-    // Text fields keep their own keys — arrows move the caret, and the number
-    // and select controls in Settings need their native behaviour.
-    if (target?.closest("input, textarea, select, [contenteditable='true']")) {
+    // Left/right belong to the caret in any text field. Up/down belong to the
+    // results, because a single-line field has no vertical caret to move — but
+    // a textarea moves between lines and a select or number input steps its
+    // value, so those keep theirs.
+    const inTextEntry = Boolean(
+      target?.closest("input, textarea, select, [contenteditable='true']"),
+    );
+    const ownsVerticalArrows = Boolean(
+      target?.closest("textarea, select, input[type='number']"),
+    );
+
+    if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+      if (inTextEntry) {
+        return;
+      }
+      event.preventDefault();
+      moveSelection(selectionStep("horizontal", event.key === "ArrowRight" ? 1 : -1));
+      return;
+    }
+
+    if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+      if (ownsVerticalArrows) {
+        return;
+      }
+      event.preventDefault();
+      moveSelection(selectionStep("vertical", event.key === "ArrowDown" ? 1 : -1));
       return;
     }
 
@@ -767,23 +829,9 @@ function App() {
       return;
     }
 
-    if (event.key === "ArrowRight") {
+    if (event.key === "Enter" && hasConfirmation()) {
       event.preventDefault();
-      moveSelection(selectionStep("horizontal", 1));
-    } else if (event.key === "ArrowLeft") {
-      event.preventDefault();
-      moveSelection(selectionStep("horizontal", -1));
-    } else if (event.key === "ArrowDown") {
-      event.preventDefault();
-      moveSelection(selectionStep("vertical", 1));
-    } else if (event.key === "ArrowUp") {
-      event.preventDefault();
-      moveSelection(selectionStep("vertical", -1));
-    } else if (event.key === "Enter") {
-      if (hasConfirmation()) {
-        event.preventDefault();
-        await confirmSelection();
-      }
+      await confirmSelection();
     }
   };
 
@@ -898,51 +946,66 @@ function App() {
   return (
     <LauncherShell dragging={draggingExternal()}>
       <div class="flex h-full flex-col gap-4">
-        {/* Height matches the drag strip in LauncherShell so the whole top band moves the window. */}
-        <div class="flex h-8 items-center px-1 select-none">
-          <h1 class="text-display font-semibold tracking-tight text-fg">DeskRun</h1>
-        </div>
-
-        {/* Startup problems such as "the hotkey was taken" are not transient, so
-            they live here rather than in the two-second toast. */}
-        <Show when={startupWarning()}>
-          <div
-            role="status"
-            class="flex items-start gap-3 rounded-sharp border border-danger-soft px-3 py-2"
-          >
-            <p class="min-w-0 flex-1 text-label text-danger">{startupWarning()}</p>
-            <button
-              type="button"
-              onClick={() => setStartupWarning("")}
-              class="shrink-0 rounded-sharp px-2 py-0.5 text-meta text-fg-subtle transition-colors duration-100 hover:bg-fill hover:text-fg"
-            >
-              Dismiss
-            </button>
+        {/* The wordmark and the field under it are one block, so the space
+            between them is theirs to set. Left to the column's uniform gap the
+            title floated with a hole under it — and on a band this wide, with
+            nothing anchoring the far end, the hole was most of the header.
+            The band doubles as the window's drag target: the strip in
+            LauncherShell covers this row plus the gap under it. */}
+        <div class="flex shrink-0 flex-col gap-2">
+          <div class="flex h-6 items-center select-none">
+            <h1 class="text-display font-semibold tracking-tight text-fg">DeskRun</h1>
           </div>
-        </Show>
 
-        <SearchBar
-          query={query()}
-          hotkey={settings().hotkey}
-          inputRef={(element) => {
-            searchInput = element;
-          }}
-          onInput={(event) => setQuery(event.currentTarget.value)}
-          onAddApp={handlePickApp}
-          onAddFolder={handlePickFolder}
-          onAddUrl={() => setEditorState({ mode: "create-url", item: null })}
-          onAddCommand={() => setEditorState({ mode: "create-command", item: null })}
-          onOpenSettings={() => setSettingsOpen(true)}
-        />
+          {/* Startup problems such as "the hotkey was taken" are not transient, so
+              they live here rather than in the two-second toast. */}
+          <Show when={startupWarning()}>
+            <div
+              role="status"
+              class="flex items-start gap-3 rounded-sharp border border-danger-soft px-3 py-2"
+            >
+              <p class="min-w-0 flex-1 text-label text-danger">{startupWarning()}</p>
+              <button
+                type="button"
+                onClick={() => setStartupWarning("")}
+                class="shrink-0 rounded-sharp px-2 py-0.5 text-meta text-fg-subtle transition-colors duration-100 hover:bg-fill hover:text-fg"
+              >
+                Dismiss
+              </button>
+            </div>
+          </Show>
 
-        <GroupTabs
-          groups={groups()}
-          currentGroupId={currentGroupId()}
-          discoveryCount={discoveryCandidates().filter((candidate) => !candidate.alreadyExists).length}
-          onSelect={setCurrentGroupId}
-          onReorderGroups={handleReorderGroups}
-          onCreateGroup={handleCreateGroup}
-        />
+          {/* The tabs belong to the search above them, so the two sit close
+              together. With the column's uniform gap they floated midway between
+              two equal spaces, which read as the strip being too tall. What is
+              left is a hairline: the labels are meant to hang off the search
+              field's rule, and any more space reads as the strip drifting away
+              from the field it belongs to. */}
+          <div class="flex shrink-0 flex-col gap-0.5">
+            <SearchBar
+              query={query()}
+              hotkey={settings().hotkey}
+              inputRef={(element) => {
+                searchInput = element;
+              }}
+              onInput={(event) => setQuery(event.currentTarget.value)}
+              onAddApp={handlePickApp}
+              onAddFolder={handlePickFolder}
+              onAddUrl={() => setEditorState({ mode: "create-url", item: null })}
+              onAddCommand={() => setEditorState({ mode: "create-command", item: null })}
+              onOpenSettings={() => setSettingsOpen(true)}
+            />
+
+            <GroupTabs
+              groups={groups()}
+              currentGroupId={currentGroupId()}
+              discoveryCount={discoveryCandidates().filter((candidate) => !candidate.alreadyExists).length}
+              onSelect={setCurrentGroupId}
+              onReorderGroups={handleReorderGroups}
+              onCreateGroup={handleCreateGroup}
+            />
+          </div>
+        </div>
 
         <Show
           when={currentGroupId() === DISCOVERY_VIEW_ID}
@@ -1148,6 +1211,16 @@ function App() {
           run(async () => {
             applySettingsResponse(await setCloseOnLaunch(value));
             notify(value ? "Hide after launch enabled" : "Hide after launch disabled");
+          }, "Could not change that setting")
+        }
+        onToggleFollowCursor={(value) =>
+          run(async () => {
+            applySettingsResponse(await setFollowCursorMonitor(value));
+            notify(
+              value
+                ? "Opening on the monitor with the pointer"
+                : "Reusing the last window position",
+            );
           }, "Could not change that setting")
         }
         onSetDisplayMode={(value) =>

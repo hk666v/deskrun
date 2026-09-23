@@ -240,6 +240,11 @@ impl StorageState {
         self.persist_settings()
     }
 
+    pub fn set_follow_cursor_monitor(&mut self, follow: bool) -> Result<()> {
+        self.settings.follow_cursor_monitor = follow;
+        self.persist_settings()
+    }
+
     pub fn set_display_mode(&mut self, display_mode: String) -> Result<()> {
         let normalized = display_mode.trim().to_ascii_lowercase();
         if normalized != "grid" && normalized != "list" {

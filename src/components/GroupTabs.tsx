@@ -139,8 +139,13 @@ export function GroupTabs(props: GroupTabsProps) {
 
   // Selection is carried by a signal underline so it stays distinct from the
   // neutral hover wash used everywhere else.
+  // The padding splits near-evenly around the label: a hair of it above, and
+  // the rest below as the room the active underline needs. It is small on both
+  // sides because the strip sits right under the search field's rule, and a
+  // label floating in the middle of an empty band reads as belonging to
+  // neither.
   const tabClass = (active: boolean) =>
-    `relative shrink-0 truncate rounded-sharp px-2 pt-1 pb-2 text-label transition-colors duration-100 ${
+    `relative shrink-0 truncate rounded-sharp px-2 pt-0.5 pb-1.5 text-label transition-colors duration-100 ${
       active ? "text-fg" : "text-fg-subtle hover:bg-fill hover:text-fg-muted"
     }`;
 
@@ -189,7 +194,12 @@ export function GroupTabs(props: GroupTabsProps) {
 
           <For each={props.groups}>
             {(group) => (
-              <div class="relative shrink-0">
+              // A flex box rather than a plain block: a button is inline-block,
+              // so inside a block it sits in a line box whose leading adds 4px —
+              // 2px above the label and 2px below — that the system tabs, being
+              // direct flex items, never pay. It pushed these labels off the
+              // line the rest of the strip sits on.
+              <div class="relative flex shrink-0">
                 <div
                   class={`pointer-events-none absolute top-0 bottom-0 w-[2px] bg-signal transition ${
                     dropTarget()?.groupId === group.id &&

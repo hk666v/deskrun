@@ -108,6 +108,7 @@ fn run_app() -> Result<()> {
             commands::set_hotkey,
             commands::set_launch_on_startup,
             commands::set_close_on_launch,
+            commands::set_follow_cursor_monitor,
             commands::set_display_mode,
             commands::sync_window_size,
             commands::set_config_directory,

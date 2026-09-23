@@ -88,6 +88,10 @@ export function setCloseOnLaunch(closeOnLaunch: boolean) {
   return invoke<BootstrapData>("set_close_on_launch", { closeOnLaunch });
 }
 
+export function setFollowCursorMonitor(follow: boolean) {
+  return invoke<BootstrapData>("set_follow_cursor_monitor", { follow });
+}
+
 export function setDisplayMode(displayMode: "grid" | "list") {
   return invoke<BootstrapData>("set_display_mode", { displayMode });
 }

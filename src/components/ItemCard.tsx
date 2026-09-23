@@ -1,7 +1,8 @@
-import { Show, createEffect, createSignal, onCleanup } from "solid-js";
+import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 import type { LaunchItem } from "../types";
 import { buildCommandPreview } from "../lib/command-preview";
 import { compactPath } from "../lib/paths";
+import { splitOnMatch } from "../lib/highlight";
 import { loadIcon } from "../lib/icon-cache";
 
 const FALLBACK_LABEL: Record<LaunchItem["kind"], string> = {
@@ -20,6 +21,8 @@ interface ItemCardProps {
   subdued?: boolean;
   /** Set while an in-app reorder drag is in flight. */
   dragState?: "dragging" | "over";
+  /// The current search term, so a result can show why it matched.
+  query: string;
   onClick: () => void;
   onSelect: () => void;
   onPreviewHover: (x: number, y: number) => void;
@@ -28,6 +31,27 @@ interface ItemCardProps {
   onDragStart: (event: DragEvent) => void;
   onDragOver: (event: DragEvent) => void;
   onDrop: (event: DragEvent) => void;
+}
+
+/// Text with the parts the query matched marked. Highlighting the match is what
+/// keeps a pinyin or substring hit from looking like a bug.
+///
+/// The amber wash is the one accent used outside selection: a search match is a
+/// selection of the text, and without it a hit is indistinguishable from noise.
+function Highlighted(props: { text: string; query: string }) {
+  const segments = createMemo(() => splitOnMatch(props.text, props.query));
+
+  return (
+    <For each={segments()}>
+      {(segment) =>
+        segment.match ? (
+          <mark class="bg-signal-soft text-fg">{segment.text}</mark>
+        ) : (
+          <>{segment.text}</>
+        )
+      }
+    </For>
+  );
 }
 
 export function ItemCard(props: ItemCardProps) {
@@ -157,6 +181,7 @@ export function ItemCard(props: ItemCardProps) {
           onDragStart={props.onDragStart}
           onDragOver={props.onDragOver}
           onDrop={props.onDrop}
+          data-item-id={props.item.id}
           aria-haspopup="menu"
           class={`group relative grid min-h-[124px] w-full min-w-0 grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-hidden rounded-sharp border bg-raised px-3 py-3 text-left transition-colors duration-100 ${
             props.active ? "border-signal-line" : "border-line hover:border-line-strong"
@@ -170,7 +195,7 @@ export function ItemCard(props: ItemCardProps) {
             <div class="flex min-h-11 min-w-0 flex-col items-start justify-center gap-2">
               <div class="min-w-0 self-stretch">
                 <div class="overflow-hidden text-body font-medium text-fg transition-colors group-hover:text-white [display:-webkit-box] [-webkit-box-orient:vertical] [-webkit-line-clamp:2] break-all">
-                  {props.item.name}
+                  <Highlighted text={props.item.name} query={props.query} />
                 </div>
               </div>
             </div>
@@ -178,12 +203,12 @@ export function ItemCard(props: ItemCardProps) {
 
           <div class="flex min-h-0 min-w-0 flex-col gap-1.5 border-l border-line pl-2">
             <div class="block min-w-0 max-w-full truncate font-mono text-data text-fg-subtle transition-colors group-hover:text-fg-muted">
-              {targetValue()}
+              <Highlighted text={targetValue()} query={props.query} />
             </div>
 
             <Show when={notePreview()}>
               <div class="block min-w-0 max-w-full truncate text-meta text-fg-faint transition-colors group-hover:text-fg-subtle">
-                {notePreview()}
+                <Highlighted text={notePreview()} query={props.query} />
               </div>
             </Show>
           </div>
@@ -207,6 +232,7 @@ export function ItemCard(props: ItemCardProps) {
         onDragStart={props.onDragStart}
         onDragOver={props.onDragOver}
         onDrop={props.onDrop}
+        data-item-id={props.item.id}
         aria-haspopup="menu"
         class={`group relative grid w-full min-w-0 grid-cols-[36px_minmax(0,1fr)_72px] items-stretch gap-3 border-b border-line px-2 py-2 text-left transition-colors duration-100 last:border-b-0 ${
           hasNote() ? "min-h-[72px]" : "min-h-[56px]"
@@ -226,7 +252,7 @@ export function ItemCard(props: ItemCardProps) {
           >
             <div class="flex min-w-0 items-center gap-2">
               <div class="truncate text-body font-medium text-fg transition-colors group-hover:text-white">
-                {props.item.name}
+                <Highlighted text={props.item.name} query={props.query} />
               </div>
               <Show when={props.item.isFavorite}>
                 <span class="sr-only">Pinned</span>
@@ -235,12 +261,12 @@ export function ItemCard(props: ItemCardProps) {
             </div>
 
             <div class="truncate font-mono text-data text-fg-subtle transition-colors group-hover:text-fg-muted">
-              {listTargetValue()}
+              <Highlighted text={listTargetValue()} query={props.query} />
             </div>
 
             <Show when={hasNote()}>
               <div class="truncate text-meta text-fg-faint transition-colors group-hover:text-fg-subtle">
-                {notePreview()}
+                <Highlighted text={notePreview()} query={props.query} />
               </div>
             </Show>
           </div>

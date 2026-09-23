@@ -162,7 +162,10 @@ export const fixtureItems: LaunchItem[] = [
   }),
 ];
 
-export function fixtureBootstrap(displayMode: Settings["displayMode"] = "list"): BootstrapData {
+export function fixtureBootstrap(
+  displayMode: Settings["displayMode"] = "list",
+  followCursorMonitor = true,
+): BootstrapData {
   return {
     // Copies, not the arrays themselves: the shim's mutating handlers push into
     // these, and handing the app the same reference would double-count whatever
@@ -179,6 +182,7 @@ export function fixtureBootstrap(displayMode: Settings["displayMode"] = "list"):
       windowHeight: 560,
       windowX: null,
       windowY: null,
+      followCursorMonitor,
     },
     configDirectory: {
       currentPath: "C:\\Users\\Administrator\\AppData\\Roaming\\com.deskrun.desktop",
