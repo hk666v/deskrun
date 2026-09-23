@@ -108,6 +108,13 @@ if (import.meta.env.DEV && !window.__TAURI_INTERNALS__) {
     reorder_items: () => fixtureItems,
     import_paths: () => fixtureItems,
     import_discovery_candidates: () => fixtureItems,
+
+    // The opener plugin's own commands. Resolve without doing anything: the
+    // action is real in the app but impossible in a browser tab, and reporting
+    // an error for it would train the eye to ignore the error path.
+    "plugin:opener|open_url": () => undefined,
+    "plugin:opener|open_path": () => undefined,
+    "plugin:opener|reveal_item_in_dir": () => undefined,
   };
 
   window.__TAURI_INTERNALS__ = {

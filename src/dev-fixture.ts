@@ -91,6 +91,9 @@ export const fixtureItems: LaunchItem[] = [
     fixedArgs: "/C",
     runtimeArgs: "nuclei -a test1 -b test2",
     note: "漏洞探测",
+    // A working directory is the only location a command item can point at, so
+    // one fixture item carries it to keep that branch exercised.
+    workingDir: "D:\\hk-tools",
     isFavorite: true,
     launchCount: 11,
     lastLaunchedAt: "2026-08-19T09:28:00Z",

@@ -41,6 +41,7 @@ import { SettingsPanel } from "./components/SettingsPanel";
 import { copyText } from "./lib/clipboard";
 import { buildCommandPreview } from "./lib/command-preview";
 import { buildQueryActions, type QueryAction } from "./lib/query-actions";
+import { revealItemLocation } from "./lib/location";
 import {
   buildSearchIndexEntry,
   calculateSearchScore,
@@ -606,10 +607,20 @@ function App() {
     }, "Could not duplicate that item");
   };
 
+  /// Shows the item on disk — the containing folder with the file selected, or
+  /// the folder itself for a folder item.
+  const handleRevealLocation = async (item: LaunchItem) => {
+    setContextMenu(null);
+    clearHoverPreview();
+    await run(
+      () => revealItemLocation(item),
+      `Could not show ${item.name} on disk`,
+    );
+  };
+
   /// Reports whether the group was created so the tab strip's inline editor can
   /// stay open when the name is rejected.
-  const handleCreateGroup = async (name: string): Promise<boolean> => {
-    try {
+  const handleCreateGroup = async (name: string): Promise<boolean> => {    try {
       const group = await createGroup(name);
       setGroups((current) => [...current, group]);
       notify(`Group “${group.name}” created`);
@@ -1042,6 +1053,7 @@ function App() {
         onToggleFavorite={handleToggleFavorite}
         onDuplicate={handleDuplicate}
         onCopyCommand={handleCopyCommand}
+        onRevealLocation={handleRevealLocation}
         onEdit={(item) => {
           setContextMenu(null);
           setEditorState({ mode: "edit", item });

@@ -1,5 +1,6 @@
 import { Show, createEffect, createMemo, createSignal } from "solid-js";
 import type { LaunchItem } from "../types";
+import { itemLocation } from "../lib/location";
 
 interface ItemContextMenuProps {
   item: LaunchItem | null;
@@ -11,6 +12,7 @@ interface ItemContextMenuProps {
   onToggleFavorite: (item: LaunchItem) => void;
   onDuplicate: (item: LaunchItem) => void;
   onCopyCommand: (item: LaunchItem) => void;
+  onRevealLocation: (item: LaunchItem) => void;
   onEdit: (item: LaunchItem) => void;
   onDelete: (item: LaunchItem) => void;
   onClose: () => void;
@@ -72,13 +74,24 @@ export function ItemContextMenu(props: ItemContextMenuProps) {
             </MenuButton>
             <MenuButton onClick={() => props.onDuplicate(item())}>Duplicate</MenuButton>
 
+            {/* Use the item, organize it, work with what it points at, change it,
+                destroy it — in that order. */}
+            <MenuDivider />
+
             <Show when={item().kind === "command"}>
               <MenuButton onClick={() => props.onCopyCommand(item())}>
                 Copy Command
               </MenuButton>
             </Show>
 
-            <MenuDivider />
+            {/* Only offered when there is somewhere to go: a URL has no location,
+                and a command on PATH has none unless a working directory is set. */}
+            <Show when={itemLocation(item()) !== null}>
+              <MenuButton onClick={() => props.onRevealLocation(item())}>
+                Open location
+              </MenuButton>
+            </Show>
+
             <MenuButton onClick={() => props.onEdit(item())}>Edit</MenuButton>
 
             <MenuDivider />
