@@ -1232,8 +1232,9 @@ function App() {
         if (!payload && !dialogBusy()) {
           await currentWindow.hide();
           setSummonPhase("dormant");
-          // Also the path taken when the backend hides the window after a
-          // launch, so the query is cleared whichever way the window goes away.
+          // A query belongs to the moment it was typed in, so it does not
+          // outlive the window that was showing it. The hides this side does not
+          // make are answered by `deskrun://hidden` below.
           setQuery("");
         }
       }),
@@ -1268,6 +1269,19 @@ function App() {
         summonTimer = window.setTimeout(() => setSummonPhase("idle"), 240);
       });
       summonListenerReady = true;
+      return unlisten;
+    });
+
+    // The window can also be hidden from the other side — the global hotkey, the
+    // tray, the close button, a launch — and one hidden that way reports no loss
+    // of focus, so the blur handler above never runs for it. What is left in the
+    // box then belongs to the errand that is over, and the next summon would
+    // open on it. The backend says the window is gone instead.
+    await register(async () => {
+      const unlisten = await listen("deskrun://hidden", () => {
+        setSummonPhase("dormant");
+        setQuery("");
+      });
       return unlisten;
     });
 

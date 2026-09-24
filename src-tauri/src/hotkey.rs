@@ -57,10 +57,22 @@ pub fn register_hotkey_or_warn(app: &AppHandle, next: &str) -> Option<String> {
     }
 }
 
+/// Tells the interface that the window it is drawn in has gone away.
+///
+/// Every way of hiding the window ends up here — the global hotkey, the tray,
+/// the close button, a launch — and a window hidden from this side does not
+/// report losing focus, so nothing on the other end would know. Without it the
+/// query typed for the last errand is still sitting in the search box the next
+/// time the launcher is summoned.
+pub const WINDOW_HIDDEN_EVENT: &str = "deskrun://hidden";
+
 pub fn hide_main_window(app: &AppHandle) -> Result<()> {
     let window = main_window(app)?;
     persist_window_state(app);
     window.hide()?;
+
+    // After the hide, never before: the box is emptied out of sight.
+    let _ = app.emit_to("main", WINDOW_HIDDEN_EVENT, ());
     Ok(())
 }
 
