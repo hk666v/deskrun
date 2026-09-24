@@ -25,10 +25,12 @@ import {
   setConfigDirectory,
   setCloseOnLaunch,
   setDisplayMode,
+  setFocusSearchKey,
   setFollowCursorMonitor,
   setHotkey,
   setLaunchOnStartup,
   setSidebarCollapsed,
+  setToggleSidebarKey,
   setUiScale,
   syncWindowSize,
   toggleFavorite,
@@ -45,7 +47,7 @@ import { SettingsPanel } from "./components/SettingsPanel";
 import { copyText } from "./lib/clipboard";
 import { buildCommandPreview } from "./lib/command-preview";
 import { displayOrder } from "./lib/item-order";
-import { childrenOf, flattenGroups, subtreeIds } from "./lib/group-tree";
+import { childrenOf, flattenGroups, groupPathLabel, subtreeIds } from "./lib/group-tree";
 import { buildQueryActions, type QueryAction } from "./lib/query-actions";
 import {
   DISCOVERY_VIEW_ID,
@@ -54,6 +56,7 @@ import {
   SYSTEM_VIEWS,
   stepView,
 } from "./lib/views";
+import { matchesShortcut } from "./lib/shortcuts";
 import { revealItemLocation } from "./lib/location";
 import {
   buildSearchIndexEntry,
@@ -103,6 +106,9 @@ const DEFAULT_SETTINGS: Settings = {
   followCursorMonitor: true,
   uiScale: 1,
   sidebarCollapsed: false,
+  // Only until bootstrap answers: the real defaults live in the backend.
+  focusSearchKey: "Ctrl+S",
+  toggleSidebarKey: "Ctrl+O",
 };
 
 const DEFAULT_CONFIG_DIRECTORY: ConfigDirectoryInfo = {
@@ -317,6 +323,17 @@ function App() {
     return new Set(subtreeIds(groups(), view));
   });
 
+  /// The branch path of each group, for the chip an item row carries: an item
+  /// has to say which group it is in, and in a nested column the group's own
+  /// name does not say where it is.
+  const groupLabels = createMemo(() => {
+    const labels = new Map<string, string>();
+    for (const group of groups()) {
+      labels.set(group.id, groupPathLabel(groups(), group.id));
+    }
+    return labels;
+  });
+
   const shouldSectionListItems = createMemo(
     () =>
       settings().displayMode === "list" &&
@@ -444,6 +461,12 @@ function App() {
     };
   });
 
+  /// Puts the caret back in the search field. Everything a pointer can click
+  /// here is a way of choosing what to search, not a place to type: without
+  /// this, a click on a group or a card leaves the focus on the button and the
+  /// next keystroke goes nowhere.
+  const focusSearch = () => searchInput?.focus();
+
   const notify = (message: string) => {
     setFeedback(message);
     window.clearTimeout(feedbackTimer);
@@ -504,6 +527,9 @@ function App() {
       return await action();
     } finally {
       setDialogBusy(false);
+      // The native window took the focus, and typing has to work the moment the
+      // launcher is back.
+      focusSearch();
     }
   };
 
@@ -714,6 +740,7 @@ function App() {
       await action.run();
       notify(action.done);
     }, "Could not complete that");
+    focusSearch();
   };
 
   /// Where a keyboard-opened context menu should appear: against the selected
@@ -974,6 +1001,18 @@ function App() {
       : index % columns === 0;
   };
 
+  /// Up and down walk whichever column the cursor is in: in the group column
+  /// they switch the view, in the results they move the selection one rendered
+  /// row. Tab is the same walk, so it lives here beside the arrows.
+  const stepVertical = (delta: number) => {
+    if (pane() === "groups") {
+      setCurrentGroupId(stepView(viewSteps(), currentGroupId(), delta));
+      return;
+    }
+
+    moveSelection(verticalStep(delta));
+  };
+
   /// Left and right move between the two columns. Inside the results they first
   /// walk along the row of cards, and only leave for the sidebar once there is
   /// nothing beside the selected one — the same way the eye reads the layout.
@@ -1023,8 +1062,14 @@ function App() {
 
     // An inline editor or a popup menu owns its own Enter, Escape and arrows.
     // Without this, pressing Escape to cancel a group name would hide the entire
-    // launcher instead, and the arrows would move the selection behind it.
-    if (target?.closest("[data-inline-editor], [data-group-menu]")) {
+    // launcher instead, and the arrows would move the selection behind it. A
+    // shortcut field that is listening wants the same: Escape cancels the
+    // capture, and the combination being recorded belongs to it alone.
+    if (
+      target?.closest(
+        "[data-inline-editor], [data-group-menu], [data-shortcut-recording]",
+      )
+    ) {
       return;
     }
 
@@ -1076,19 +1121,26 @@ function App() {
       return;
     }
 
+    // The window's own two keys, both of which the user sets in Settings. They
+    // are checked before anything else stands down, because they have to work
+    // from wherever the focus went — that is the whole point of them.
+    if (matchesShortcut(event, settings().toggleSidebarKey)) {
+      event.preventDefault();
+      void toggleSidebar();
+      return;
+    }
+
+    if (matchesShortcut(event, settings().focusSearchKey)) {
+      event.preventDefault();
+      focusSearch();
+      return;
+    }
+
     // Ctrl+comma for settings, tab-style, because it is the one thing the
     // keyboard cannot reach any other way.
     if (event.ctrlKey && (event.key === "," || event.code === "Comma")) {
       event.preventDefault();
       setSettingsOpen(true);
-      return;
-    }
-
-    // Ctrl+B for the column, tab-style, because it is the one control that has
-    // to survive its own subject disappearing.
-    if (event.ctrlKey && (event.key === "b" || event.key === "B")) {
-      event.preventDefault();
-      void toggleSidebar();
       return;
     }
 
@@ -1118,12 +1170,20 @@ function App() {
         return;
       }
       event.preventDefault();
-      const delta = event.key === "ArrowDown" ? 1 : -1;
-      if (pane() === "groups") {
-        setCurrentGroupId(stepView(viewSteps(), currentGroupId(), delta));
-      } else {
-        moveSelection(verticalStep(delta));
-      }
+      stepVertical(event.key === "ArrowDown" ? 1 : -1);
+      return;
+    }
+
+    // Tab is the same walk as down, and Shift+Tab as up. Left to the browser it
+    // moves through the tab order instead, which from the search box goes to the
+    // row of add buttons beside it — the one place in a launcher that is typed
+    // into where the keyboard has no business being. The caret is brought back
+    // to the search box with the move, so the next thing typed is a search and
+    // not a key into whatever was focused.
+    if (event.key === "Tab" && !event.ctrlKey && !event.altKey && !event.metaKey) {
+      event.preventDefault();
+      focusSearch();
+      stepVertical(event.shiftKey ? -1 : 1);
       return;
     }
 
@@ -1284,16 +1344,20 @@ function App() {
             counts={viewCounts()}
             isExpanded={isGroupExpanded}
             onSetExpanded={setGroupExpanded}
+            live={pane() === "groups"}
             onSelect={(groupId) => {
               setCurrentGroupId(groupId);
               // Clicking the column is a statement about where the user is
-              // working, so the arrow keys follow them there.
+              // working, so the arrow keys follow them there — and the caret
+              // stays in the field they type into.
               setPane("groups");
+              focusSearch();
             }}
             onMoveGroup={handleMoveGroup}
             onRenameGroup={handleRenameGroup}
             onDeleteGroup={handleDeleteGroup}
             onCreateGroup={handleCreateGroup}
+            onFocusSearch={focusSearch}
           />
         </Show>
 
@@ -1303,12 +1367,25 @@ function App() {
               title floated with a hole under it. */}
           <div class="flex shrink-0 flex-col gap-2">
             <div class="flex h-6 items-center justify-between select-none">
-              {/* The wordmark is the one place the accent is allowed to be purely
-                  decorative: it is where the eye lands first, and a lit name
-                  reads as "this thing is on". */}
-              <h1 class="bg-gradient-to-r from-fg to-signal bg-clip-text text-display font-semibold tracking-tight text-transparent drop-shadow-[0_0_18px_var(--color-signal-soft)]">
-                DeskRun
-              </h1>
+              {/* Bottom-aligned rather than centred: the badge belongs on the
+                  wordmark's line, not floating in the middle of the band. */}
+              <div class="flex min-w-0 items-end gap-2">
+                {/* The wordmark is the one place the accent is allowed to be
+                    purely decorative: it is where the eye lands first, and a lit
+                    name reads as "this thing is on". */}
+                <h1 class="bg-gradient-to-r from-fg to-signal bg-clip-text text-display font-semibold tracking-tight text-transparent drop-shadow-[0_0_18px_var(--color-signal-soft)]">
+                  DeskRun
+                </h1>
+
+                {/* The window's own hotkey, where the name is: it is about the
+                    launcher as a whole rather than about anything inside it. */}
+                <span
+                  class="shrink-0 rounded-sharp border border-line bg-inset px-1.5 font-mono text-micro text-fg-subtle"
+                  title="Shows or hides the launcher"
+                >
+                  {settings().hotkey}
+                </span>
+              </div>
 
               {/* With the column hidden this button is what is left of it, so it
                   lives in the title row rather than inside the sidebar: a
@@ -1321,7 +1398,9 @@ function App() {
                 type="button"
                 onClick={toggleSidebar}
                 aria-expanded={!settings().sidebarCollapsed}
-                title={settings().sidebarCollapsed ? "Show groups" : "Hide groups"}
+                title={`${
+                  settings().sidebarCollapsed ? "Show groups" : "Hide groups"
+                } (${settings().toggleSidebarKey})`}
                 // Above the shell's drag strip, which reaches across the top of
                 // the window and would otherwise turn every click on this button
                 // into a window drag.
@@ -1375,7 +1454,7 @@ function App() {
               from the field it belongs to. */}
             <SearchBar
               query={query()}
-              hotkey={settings().hotkey}
+              shortcut={settings().focusSearchKey}
               inputRef={(element) => {
                 searchInput = element;
               }}
@@ -1403,6 +1482,8 @@ function App() {
                 sectioned={shouldSectionListItems()}
                 query={query()}
                 viewId={currentGroupId()}
+                groupLabels={groupLabels()}
+                live={pane() === "results"}
                 queryActions={queryActions()}
                 onRunQueryAction={runQueryAction}
                 onColumnsChange={setGridColumns}
@@ -1414,6 +1495,7 @@ function App() {
                 onSelect={(item) => {
                 setSelectedItemId(item.id);
                 setPane("results");
+                focusSearch();
               }}
                 onPreviewHover={scheduleHoverPreview}
                 onPreviewLeave={clearHoverPreview}
@@ -1589,6 +1671,16 @@ function App() {
             applySettingsResponse(await setHotkey(value));
             notify("Hotkey updated");
           }, "Could not register that hotkey")
+        }
+        onSetFocusSearchKey={(value) =>
+          run(async () => {
+            applySettingsResponse(await setFocusSearchKey(value));
+          }, "Could not change that shortcut")
+        }
+        onSetToggleSidebarKey={(value) =>
+          run(async () => {
+            applySettingsResponse(await setToggleSidebarKey(value));
+          }, "Could not change that shortcut")
         }
         onToggleStartup={(value) =>
           run(async () => {

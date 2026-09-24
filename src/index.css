@@ -353,6 +353,14 @@
     background: var(--color-canvas);
   }
 
+  /* A shortcut field is read-only and filled by pressing the keys, so the
+     caret never lands in it: the listening state has to be the one that looks
+     like it, or an empty box reads as a broken one. */
+  [data-shortcut-recording] {
+    border-color: var(--color-signal-line);
+    background: var(--color-canvas);
+  }
+
   .field-select {
     appearance: none;
   }

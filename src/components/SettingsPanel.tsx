@@ -1,5 +1,6 @@
 import { For, Show } from "solid-js";
 import type { ConfigDirectoryInfo, Settings } from "../types";
+import { ShortcutInput } from "./ShortcutInput";
 
 interface SettingsPanelProps {
   open: boolean;
@@ -7,6 +8,8 @@ interface SettingsPanelProps {
   configDirectory: ConfigDirectoryInfo;
   onClose: () => void;
   onSetHotkey: (value: string) => void;
+  onSetFocusSearchKey: (value: string) => void;
+  onSetToggleSidebarKey: (value: string) => void;
   onToggleStartup: (value: boolean) => void;
   onToggleCloseOnLaunch: (value: boolean) => void;
   onToggleFollowCursor: (value: boolean) => void;
@@ -60,12 +63,35 @@ export function SettingsPanel(props: SettingsPanelProps) {
             <section class="flex flex-col">
               <h3 class="mb-1 text-label font-medium text-fg">General</h3>
 
+              {/* Every one of these is filled by pressing the combination, not
+                  by typing it: see ShortcutInput. */}
               <div class={`flex flex-col gap-1 ${ROW}`}>
                 <span class="text-meta text-fg-subtle">Global hotkey</span>
-                <input
+                <ShortcutInput
+                  label="Global hotkey"
                   value={props.settings.hotkey}
-                  onChange={(event) => props.onSetHotkey(event.currentTarget.value)}
-                  class="field-input"
+                  onCommit={props.onSetHotkey}
+                />
+              </div>
+
+              {/* The window's own two keys. They are written the same way the
+                  global hotkey is, and anything without Ctrl or Alt is refused:
+                  a bare letter would be eaten before it reached the search box. */}
+              <div class={`flex flex-col gap-1 ${ROW}`}>
+                <span class="text-meta text-fg-subtle">Focus the search box</span>
+                <ShortcutInput
+                  label="Focus the search box"
+                  value={props.settings.focusSearchKey}
+                  onCommit={props.onSetFocusSearchKey}
+                />
+              </div>
+
+              <div class={`flex flex-col gap-1 ${ROW}`}>
+                <span class="text-meta text-fg-subtle">Show or hide the groups</span>
+                <ShortcutInput
+                  label="Show or hide the groups"
+                  value={props.settings.toggleSidebarKey}
+                  onCommit={props.onSetToggleSidebarKey}
                 />
               </div>
 

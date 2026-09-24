@@ -13,9 +13,10 @@ use uuid::Uuid;
 use crate::{
     icons,
     models::{
-        normalized_ui_scale, BootstrapData, ConfigDirectoryInfo, CreateItemPayload,
-        DiscoveryCandidateImport, Group, IconSource, LaunchItem, LaunchItemKind, PersistedItems,
-        Settings, UpdateItemPayload, WindowSizeLimits,
+        normalized_shortcut, normalized_ui_scale, BootstrapData, ConfigDirectoryInfo,
+        CreateItemPayload, DiscoveryCandidateImport, Group, IconSource, LaunchItem, LaunchItemKind,
+        PersistedItems, Settings, UpdateItemPayload, WindowSizeLimits, DEFAULT_FOCUS_SEARCH_KEY,
+        DEFAULT_TOGGLE_SIDEBAR_KEY,
     },
 };
 
@@ -255,6 +256,16 @@ impl StorageState {
 
     pub fn set_sidebar_collapsed(&mut self, collapsed: bool) -> Result<()> {
         self.settings.sidebar_collapsed = collapsed;
+        self.persist_settings()
+    }
+
+    pub fn set_focus_search_key(&mut self, key: String) -> Result<()> {
+        self.settings.focus_search_key = normalized_shortcut(&key, DEFAULT_FOCUS_SEARCH_KEY);
+        self.persist_settings()
+    }
+
+    pub fn set_toggle_sidebar_key(&mut self, key: String) -> Result<()> {
+        self.settings.toggle_sidebar_key = normalized_shortcut(&key, DEFAULT_TOGGLE_SIDEBAR_KEY);
         self.persist_settings()
     }
 
@@ -822,6 +833,15 @@ impl StorageState {
         // A scale that would make the window unusable is not worth honouring:
         // the interface has no way back to a sane size from inside itself.
         self.settings.ui_scale = normalized_ui_scale(self.settings.ui_scale);
+
+        // A shortcut that does not parse is one the window can never match, so
+        // it would leave the user with a key that does nothing at all.
+        self.settings.focus_search_key =
+            normalized_shortcut(&self.settings.focus_search_key, DEFAULT_FOCUS_SEARCH_KEY);
+        self.settings.toggle_sidebar_key = normalized_shortcut(
+            &self.settings.toggle_sidebar_key,
+            DEFAULT_TOGGLE_SIDEBAR_KEY,
+        );
 
         // A group that names a parent that is gone, or that is sitting inside
         // one of its own descendants, is pulled back to the top level. Only a

@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { childrenOf, descendantIds, flattenGroups, subtreeIds } from "./group-tree";
+import {
+  childrenOf,
+  descendantIds,
+  flattenGroups,
+  groupPathLabel,
+  subtreeIds,
+} from "./group-tree";
 import type { Group } from "../types";
 
 function group(id: string, parentId: string | null = null, sortOrder = 0): Group {
@@ -48,6 +54,21 @@ describe("descendantIds", () => {
 describe("subtreeIds", () => {
   it("is the group and everything under it", () => {
     expect(subtreeIds(tree, "a")).toEqual(["a", "a1", "a1x", "a2"]);
+  });
+});
+
+describe("groupPathLabel", () => {
+  it("names the branch a group sits in, from the top down", () => {
+    expect(groupPathLabel(tree, "a1x")).toBe("a / a1 / a1x");
+  });
+
+  it("is just the name for a top-level group", () => {
+    expect(groupPathLabel(tree, "b")).toBe("b");
+  });
+
+  it("stops rather than looping when the data points at itself", () => {
+    const looped: Group[] = [group("x", "y"), group("y", "x")];
+    expect(groupPathLabel(looped, "x")).toBe("y / x");
   });
 });
 

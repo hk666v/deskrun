@@ -12,6 +12,11 @@ interface ItemGridProps {
   sectioned: boolean;
   query: string;
   viewId: string | null;
+  /// The branch path of each group, by id, for the chip on a row. An item has to
+  /// say which group it is in.
+  groupLabels: Map<string, string>;
+  /// Whether the arrow keys are working here rather than in the column.
+  live: boolean;
   /// Offered instead of a dead end when nothing matches the query.
   queryActions: QueryAction[];
   onLaunch: (item: LaunchItem) => void;
@@ -67,9 +72,17 @@ export function ItemGrid(props: ItemGridProps) {
       index={index}
       layout={props.viewMode}
       active={item.id === props.activeItemId}
+      live={props.live}
       draggable={props.sortable}
       subdued={subdued}
       query={props.query}
+      // In a group's own view every row would carry the same chip, so it is only
+      // shown where it tells the user something they cannot already see.
+      groupLabel={
+        props.viewId === item.groupId
+          ? undefined
+          : props.groupLabels.get(item.groupId ?? "")
+      }
       dragState={
         draggedId() === item.id ? "dragging" : overId() === item.id ? "over" : undefined
       }

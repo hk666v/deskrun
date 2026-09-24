@@ -112,6 +112,8 @@ fn run_app() -> Result<()> {
             commands::set_follow_cursor_monitor,
             commands::set_ui_scale,
             commands::set_sidebar_collapsed,
+            commands::set_focus_search_key,
+            commands::set_toggle_sidebar_key,
             commands::set_display_mode,
             commands::sync_window_size,
             commands::set_config_directory,

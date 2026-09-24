@@ -33,6 +33,14 @@ interface ItemCardProps {
   dragState?: "dragging" | "over";
   /// The current search term, so a result can show why it matched.
   query: string;
+  /// Whether the arrow keys are working in this pane. The selection is drawn at
+  /// full strength here when they are, and quietly when they are in the column
+  /// beside it — that difference is the only thing on screen saying where up and
+  /// down will go.
+  live: boolean;
+  /// The branch path of the group this item is filed in, when that is worth
+  /// saying — the view it is being shown in is not that group.
+  groupLabel?: string;
   /// Position in the list. It is what staggers the arrival animation, capped so
   /// a long list is never still arriving once the user is typing.
   index: number;
@@ -141,6 +149,24 @@ export function ItemCard(props: ItemCardProps) {
     }
   };
 
+  /// The group this item is filed in. Quiet, and only present when the view it
+  /// is being shown in is not that group: it answers a question the row is not
+  /// otherwise about.
+  const groupChip = () => (
+    <Show when={props.groupLabel}>
+      {(label) => (
+        <span
+          class={`max-w-[140px] shrink-0 truncate rounded-sharp border border-line px-1.5 text-micro ${
+            props.subdued ? "text-fg-faint" : "text-fg-subtle"
+          }`}
+          title={label()}
+        >
+          {label()}
+        </span>
+      )}
+    </Show>
+  );
+
   const overlays = () => (
     <>
       {/* Under the content, so the light passes beneath the text instead of
@@ -148,15 +174,20 @@ export function ItemCard(props: ItemCardProps) {
       <div class="pointer-events-none absolute inset-0 opacity-0 spotlight transition-opacity duration-150 group-hover:opacity-100" />
 
       <Show when={props.active}>
-        {/* A row is wide and flat, so the accent is spent as a wash that fades
-            out to the right instead of a flat tint: the row still reads as part
-            of the list, and the eye is pulled to the edge the mark is on. A
-            card is a box, so there it is the border and the lift that carry the
-            selection. */}
-        <Show when={props.layout === "list"}>
-          <div class="pointer-events-none absolute inset-0 bg-gradient-to-r from-signal-soft to-transparent" />
-        </Show>
-        <div class="pointer-events-none absolute inset-y-0 left-0 w-[2px] bg-gradient-to-b from-signal to-signal-hot shadow-[0_0_14px_var(--color-signal-glow)]" />
+        {/* Positioned, not merely a wrapper: the card is a grid, and a plain
+            div here would be laid out as one of its items and push the rest
+            along. */}
+        <div class={`pointer-events-none absolute inset-0 ${props.live ? "" : "opacity-40"}`}>
+          {/* A row is wide and flat, so the accent is spent as a wash that fades
+              out to the right instead of a flat tint: the row still reads as part
+              of the list, and the eye is pulled to the edge the mark is on. A
+              card is a box, so there it is the border and the lift that carry the
+              selection. */}
+          <Show when={props.layout === "list"}>
+            <div class="pointer-events-none absolute inset-0 bg-gradient-to-r from-signal-soft to-transparent" />
+          </Show>
+          <div class="pointer-events-none absolute inset-y-0 left-0 w-[2px] bg-gradient-to-b from-signal to-signal-hot shadow-[0_0_14px_var(--color-signal-glow)]" />
+        </div>
       </Show>
       <Show when={props.dragState === "over"}>
         <div class="pointer-events-none absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-signal to-signal-hot" />
@@ -224,7 +255,9 @@ export function ItemCard(props: ItemCardProps) {
           aria-haspopup="menu"
           class={`group relative grid min-h-[124px] w-full min-w-0 grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-hidden rounded-sharp border bg-raised px-3 py-3 text-left surface-transition hover:-translate-y-0.5 ${
             props.active
-              ? "border-signal-line shadow-select hover:bg-raised-hover"
+              ? props.live
+                ? "border-signal-line shadow-select hover:bg-raised-hover"
+                : "border-[color-mix(in_srgb,var(--color-signal-line)_45%,transparent)] hover:bg-raised-hover"
               : "border-line hover:border-line-strong hover:bg-raised-hover"
           } ${stateClass()}`}
           style={{ "--row-delay": rowDelay() }}
@@ -240,6 +273,7 @@ export function ItemCard(props: ItemCardProps) {
                   <Highlighted text={props.item.name} query={props.query} />
                 </div>
               </div>
+              {groupChip()}
             </div>
           </div>
 
@@ -309,6 +343,7 @@ export function ItemCard(props: ItemCardProps) {
                 <span class="sr-only">Pinned</span>
                 <span class="h-1.5 w-1.5 shrink-0 rounded-full bg-signal" />
               </Show>
+              {groupChip()}
             </div>
 
             <div

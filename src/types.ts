@@ -49,6 +49,10 @@ export interface Settings {
   uiScale: number;
   /** Whether the group sidebar is out of the way. */
   sidebarCollapsed: boolean;
+  /** The key that returns the caret to the search field, as "Ctrl+S". */
+  focusSearchKey: string;
+  /** The key that shows or hides the group column, as "Ctrl+O". */
+  toggleSidebarKey: string;
 }
 
 export interface ConfigDirectoryInfo {

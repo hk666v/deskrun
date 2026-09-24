@@ -83,6 +83,11 @@ pub struct Settings {
     /// Whether the group sidebar is out of the way. Remembered because it is a
     /// decision about the window, and a launcher is opened many times a day.
     pub sidebar_collapsed: bool,
+    /// The two keys the window itself answers to, written the way the global
+    /// hotkey is: bringing the caret back to the search field, and showing or
+    /// hiding the group column.
+    pub focus_search_key: String,
+    pub toggle_sidebar_key: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -115,6 +120,50 @@ pub const MAX_WINDOW_WIDTH: u32 = 1400;
 pub const MIN_UI_SCALE: f64 = 0.85;
 pub const MAX_UI_SCALE: f64 = 1.4;
 
+/// The keys the window answers to out of the box. Both are in-app shortcuts
+/// rather than global ones: they only mean anything while the launcher has the
+/// keyboard.
+pub const DEFAULT_FOCUS_SEARCH_KEY: &str = "Ctrl+S";
+pub const DEFAULT_TOGGLE_SIDEBAR_KEY: &str = "Ctrl+O";
+
+/// A shortcut the launcher can bind: at least one modifier and then a key.
+///
+/// A bare key is not one — binding "s" would eat every s typed into the search
+/// field — and neither is Shift alone, which is still just typing. Anything that
+/// does not parse falls back to the default rather than leaving the window with
+/// a shortcut it can never match.
+pub fn normalized_shortcut(value: &str, fallback: &str) -> String {
+    let parts: Vec<&str> = value
+        .split('+')
+        .map(str::trim)
+        .filter(|part| !part.is_empty())
+        .collect();
+    if parts.len() < 2 {
+        return fallback.to_string();
+    }
+
+    let is_modifier = |part: &str| {
+        matches!(
+            part.to_ascii_lowercase().as_str(),
+            "ctrl" | "control" | "alt" | "shift" | "meta" | "cmd" | "super" | "win"
+        )
+    };
+    let modifiers = &parts[..parts.len() - 1];
+    let key = parts[parts.len() - 1];
+    let carries_ctrl_or_alt = modifiers.iter().any(|part| {
+        matches!(
+            part.to_ascii_lowercase().as_str(),
+            "ctrl" | "control" | "alt"
+        )
+    });
+
+    if !carries_ctrl_or_alt || is_modifier(key) || modifiers.iter().any(|part| !is_modifier(part)) {
+        return fallback.to_string();
+    }
+
+    parts.join("+")
+}
+
 pub fn normalized_ui_scale(scale: f64) -> f64 {
     if !scale.is_finite() {
         return 1.0;
@@ -138,6 +187,8 @@ impl Default for Settings {
             follow_cursor_monitor: true,
             ui_scale: 1.0,
             sidebar_collapsed: false,
+            focus_search_key: DEFAULT_FOCUS_SEARCH_KEY.to_string(),
+            toggle_sidebar_key: DEFAULT_TOGGLE_SIDEBAR_KEY.to_string(),
         }
     }
 }
@@ -262,5 +313,29 @@ mod tests {
         let settings: Settings =
             serde_json::from_str(r#"{"hotkey":"Alt+Space","windowWidth":760}"#).unwrap();
         assert_eq!(settings.ui_scale, 1.0);
+    }
+
+    #[test]
+    fn a_modifier_and_a_key_is_a_shortcut() {
+        assert_eq!(normalized_shortcut("Ctrl+O", "Ctrl+S"), "Ctrl+O");
+        assert_eq!(normalized_shortcut("Alt+ Space ", "Ctrl+S"), "Alt+Space");
+        assert_eq!(
+            normalized_shortcut("Shift+Ctrl+K", "Ctrl+S"),
+            "Shift+Ctrl+K"
+        );
+    }
+
+    #[test]
+    fn a_bare_key_is_not_a_shortcut() {
+        // It would eat every "s" typed into the search field, and Shift alone is
+        // still just typing.
+        for value in ["s", "Shift+S", "Ctrl", "Ctrl+Shift", ""] {
+            assert_eq!(normalized_shortcut(value, "Ctrl+S"), "Ctrl+S");
+        }
+    }
+
+    #[test]
+    fn a_shortcut_with_an_unknown_part_is_not_one() {
+        assert_eq!(normalized_shortcut("Ctrl+Banana+S", "Ctrl+O"), "Ctrl+O");
     }
 }

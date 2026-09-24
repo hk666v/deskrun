@@ -112,6 +112,16 @@ export function setSidebarCollapsed(collapsed: boolean) {
   return invoke<BootstrapData>("set_sidebar_collapsed", { collapsed });
 }
 
+/// The key that returns the caret to the search field, written as "Ctrl+S".
+export function setFocusSearchKey(value: string) {
+  return invoke<BootstrapData>("set_focus_search_key", { value });
+}
+
+/// The key that shows or hides the group column, written as "Ctrl+O".
+export function setToggleSidebarKey(value: string) {
+  return invoke<BootstrapData>("set_toggle_sidebar_key", { value });
+}
+
 export function setDisplayMode(displayMode: "grid" | "list") {
   return invoke<BootstrapData>("set_display_mode", { displayMode });
 }

@@ -46,6 +46,28 @@ export function subtreeIds(groups: Group[], groupId: string): string[] {
   return [groupId, ...descendantIds(groups, groupId)];
 }
 
+/// Where a group sits, from the top down: "代理 / 命令行工具".
+///
+/// A chip on an item has to say which group the item is in, and a nested group's
+/// own name does not say where it is — two branches can each hold a "Tools".
+export function groupPathLabel(groups: Group[], groupId: string): string {
+  const names: string[] = [];
+  const seen = new Set<string>();
+  let current: string | null = groupId;
+
+  while (current && !seen.has(current)) {
+    seen.add(current);
+    const group = groups.find((entry) => entry.id === current);
+    if (!group) {
+      break;
+    }
+    names.unshift(group.name);
+    current = group.parentId ?? null;
+  }
+
+  return names.join(" / ");
+}
+
 /// Walks the tree the way the column draws it, leaving out the branches that are
 /// collapsed.
 export function flattenGroups(

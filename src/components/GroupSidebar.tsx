@@ -18,6 +18,14 @@ interface GroupSidebarProps {
   isExpanded: (groupId: string) => boolean;
   onSetExpanded: (groupId: string, expanded: boolean) => void;
   onSelect: (groupId: string | null) => void;
+  /// Whether the arrow keys are working in this column. Its selection marks are
+  /// drawn at full strength when they are and quietly when they are not, which
+  /// is the only thing on screen that says where up and down will go.
+  live: boolean;
+  /// Puts the caret back in the search field. Clicking this column must not take
+  /// the keyboard away from it: the launcher is typed into, so after any of
+  /// these actions the next keystroke has to land in the search box.
+  onFocusSearch: () => void;
   /// Files a group inside another, or beside it. `beforeId` of null means last
   /// among the new siblings.
   onMoveGroup: (
@@ -95,6 +103,9 @@ export function GroupSidebar(props: GroupSidebarProps) {
   const cancelCreate = () => {
     setCreatingIn(null);
     setDraftName("");
+    // The field the name was being typed into has just been removed, so focus
+    // would fall to nothing; the launcher is typed into, so it goes home.
+    props.onFocusSearch();
   };
 
   const commitCreate = async () => {
@@ -126,6 +137,7 @@ export function GroupSidebar(props: GroupSidebarProps) {
   const cancelRename = () => {
     setRenamingId(null);
     setRenameDraft("");
+    props.onFocusSearch();
   };
 
   const commitRename = async () => {
@@ -189,6 +201,9 @@ export function GroupSidebar(props: GroupSidebarProps) {
       return;
     }
     setMenu(null);
+    // Hand the keyboard back first: an entry that opens a name field takes it
+    // again itself, and everything else leaves the caret where typing expects it.
+    props.onFocusSearch();
     entry.run();
   };
 
@@ -379,19 +394,14 @@ export function GroupSidebar(props: GroupSidebarProps) {
         type="button"
         aria-current={active() ? "page" : undefined}
         onClick={() => props.onSelect(viewId)}
+        // The caret stays in the search field, as it does for the group rows.
+        onMouseDown={(event) => event.preventDefault()}
         title={label}
         class={`relative flex h-7 w-full shrink-0 items-center gap-2 rounded-sharp px-2 text-left text-label transition-colors duration-100 ${
           active() ? "bg-fill-strong text-fg" : "text-fg-muted hover:bg-fill hover:text-fg"
         }`}
       >
-        <Show when={active()}>
-          {/* The same two marks the selected row in the list uses: the wash
-              fading to the right, and the bar it is anchored to. Selection has
-              to look like one thing, or the column reads as a different control
-              than the list it switches. */}
-          <div class="pointer-events-none absolute inset-0 bg-gradient-to-r from-signal-soft to-transparent" />
-          <div class="pointer-events-none absolute inset-y-1 left-0 w-[2px] rounded-full bg-gradient-to-b from-signal to-signal-hot" />
-        </Show>
+        <Show when={active()}>{selectionMarks()}</Show>
         <span class="min-w-0 flex-1 truncate">{label}</span>
         <span class="shrink-0 font-mono text-micro text-fg-faint">
           {props.counts.get(viewId) ?? 0}
@@ -424,6 +434,9 @@ export function GroupSidebar(props: GroupSidebarProps) {
           if (event.button !== 0) {
             return;
           }
+          // Keeps the caret in the search field: a row that takes focus would
+          // swallow everything typed next.
+          event.preventDefault();
           pointerStart = { x: event.clientX, y: event.clientY };
           setDragGroupId(group.id);
           setDropTarget(null);
@@ -437,12 +450,7 @@ export function GroupSidebar(props: GroupSidebarProps) {
         {dropLine(group.id, "before", "top")}
         {dropLine(group.id, "after", "bottom")}
 
-        <Show when={active()}>
-          {/* The same wash and bar the list's selected row carries: selection is
-              one language across the window. */}
-          <div class="pointer-events-none absolute inset-0 bg-gradient-to-r from-signal-soft to-transparent" />
-          <div class="pointer-events-none absolute inset-y-1 left-0 w-[2px] rounded-full bg-gradient-to-b from-signal to-signal-hot" />
-        </Show>
+        <Show when={active()}>{selectionMarks()}</Show>
 
         {/* A spacer where the chevron would be, so names line up whether or not
             a group has anything inside it. */}
@@ -456,6 +464,9 @@ export function GroupSidebar(props: GroupSidebarProps) {
               event.stopPropagation();
               setExpanded(group.id, !isExpanded(group.id));
             }}
+            // Focus stays where it is, so a collapse does not cost the user the
+            // query they were typing.
+            onMouseDown={(event) => event.preventDefault()}
             aria-expanded={isExpanded(group.id)}
             aria-label={isExpanded(group.id) ? `Collapse ${group.name}` : `Expand ${group.name}`}
             title={isExpanded(group.id) ? "Collapse" : "Expand"}
@@ -534,6 +545,9 @@ export function GroupSidebar(props: GroupSidebarProps) {
             event.stopPropagation();
             startCreate(group.id);
           }}
+          // The name field this opens takes focus itself; this keeps the click
+          // from taking it first and cancelling on the way through.
+          onMouseDown={(event) => event.preventDefault()}
           title={`New group inside ${group.name}`}
           aria-label={`New group inside ${group.name}`}
           class="flex h-4 w-4 shrink-0 items-center justify-center rounded-sharp text-fg-faint opacity-0 transition-opacity duration-100 group-hover/row:opacity-100 hover:text-fg-muted focus-visible:opacity-100"
@@ -553,6 +567,22 @@ export function GroupSidebar(props: GroupSidebarProps) {
       </div>
     );
   };
+
+  /// The two marks that say "this is the view you are on": the wash fading to
+  /// the right, and the bar it is anchored to — the same pair the list's
+  /// selected row carries.
+  ///
+  /// They are drawn at full strength only in the live column. That dimming is
+  /// the whole cue for where the arrow keys are working, so it is deliberately
+  /// the marks and not the text: the names have to stay readable either way.
+  const selectionMarks = () => (
+    // Positioned rather than a bare wrapper: rows are flex containers, and a
+    // plain div here would take a slot and a gap with it.
+    <div class={`pointer-events-none absolute inset-0 ${props.live ? "" : "opacity-40"}`}>
+      <div class="pointer-events-none absolute inset-0 bg-gradient-to-r from-signal-soft to-transparent" />
+      <div class="pointer-events-none absolute inset-y-1 left-0 w-[2px] rounded-full bg-gradient-to-b from-signal to-signal-hot" />
+    </div>
+  );
 
   return (
     <nav
@@ -612,7 +642,13 @@ export function GroupSidebar(props: GroupSidebarProps) {
       <Show when={menu()}>
         {(state) => (
           <>
-            <div class="fixed inset-0 z-scrim" onMouseDown={() => setMenu(null)} />
+            <div
+              class="fixed inset-0 z-scrim"
+              onMouseDown={() => {
+                setMenu(null);
+                props.onFocusSearch();
+              }}
+            />
             <div
               ref={menuRef}
               role="menu"
@@ -637,6 +673,7 @@ export function GroupSidebar(props: GroupSidebarProps) {
                 } else if (event.key === "Escape") {
                   event.preventDefault();
                   setMenu(null);
+                  props.onFocusSearch();
                 }
               }}
               class="fixed z-menu min-w-[180px] animate-pop-in overflow-hidden rounded-panel border border-line-strong bg-raised p-1 shadow-overlay outline-none"

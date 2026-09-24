@@ -172,6 +172,9 @@ export function fixtureBootstrap(
   followCursorMonitor = true,
   uiScale = 1,
   sidebarCollapsed = false,
+  focusSearchKey = "Ctrl+S",
+  toggleSidebarKey = "Ctrl+O",
+  hotkey = "Alt+Space",
 ): BootstrapData {
   return {
     // Copies, not the arrays themselves: the shim's mutating handlers push into
@@ -180,7 +183,7 @@ export function fixtureBootstrap(
     items: [...fixtureItems],
     groups: [...fixtureGroups],
     settings: {
-      hotkey: "Alt+Space",
+      hotkey,
       launchOnStartup: false,
       closeOnLaunch: true,
       themeMode: "system",
@@ -192,6 +195,8 @@ export function fixtureBootstrap(
       followCursorMonitor,
       uiScale,
       sidebarCollapsed,
+      focusSearchKey,
+      toggleSidebarKey,
     },
     configDirectory: {
       currentPath: "C:\\Users\\Administrator\\AppData\\Roaming\\com.deskrun.desktop",

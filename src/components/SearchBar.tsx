@@ -2,7 +2,8 @@ import type { JSX } from "solid-js";
 
 interface SearchBarProps {
   query: string;
-  hotkey: string;
+  /// The key that brings the caret back to this field, shown beside it.
+  shortcut: string;
   inputRef?: (element: HTMLInputElement) => void;
   onInput: JSX.EventHandler<HTMLInputElement, InputEvent>;
   onAddApp: () => void;
@@ -35,8 +36,11 @@ export function SearchBar(props: SearchBarProps) {
         class="min-w-0 flex-1 bg-transparent text-title text-fg outline-none placeholder:text-fg-faint"
       />
 
+      {/* The key that returns to this field, right where the user is looking
+          when the question comes up. The window's own hotkey is not shown here:
+          it is a way back to the launcher, not a way into this box. */}
       <div class="shrink-0 rounded-sharp border border-line bg-inset px-2 py-1 font-mono text-data text-fg-subtle">
-        {props.hotkey}
+        {props.shortcut}
       </div>
 
       <div class="flex shrink-0 items-center gap-1">

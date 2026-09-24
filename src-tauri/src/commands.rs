@@ -345,6 +345,32 @@ pub fn set_sidebar_collapsed(
 }
 
 #[tauri::command]
+pub fn set_focus_search_key(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+    value: String,
+) -> Result<BootstrapData, String> {
+    let mut storage = state.lock()?;
+    storage
+        .set_focus_search_key(value)
+        .map_err(|error| format!("{error:#}"))?;
+    bootstrap_data(&app, &storage)
+}
+
+#[tauri::command]
+pub fn set_toggle_sidebar_key(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+    value: String,
+) -> Result<BootstrapData, String> {
+    let mut storage = state.lock()?;
+    storage
+        .set_toggle_sidebar_key(value)
+        .map_err(|error| format!("{error:#}"))?;
+    bootstrap_data(&app, &storage)
+}
+
+#[tauri::command]
 pub fn set_display_mode(
     app: AppHandle,
     state: State<'_, SharedState>,

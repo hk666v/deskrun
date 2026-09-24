@@ -19,6 +19,7 @@ import {
   fixtureGroups,
   fixtureItems,
 } from "./dev-fixture";
+import { isUsableShortcut } from "./lib/shortcuts";
 
 declare global {
   interface Window {
@@ -42,9 +43,20 @@ if (import.meta.env.DEV && !window.__TAURI_INTERNALS__) {
   let followCursorMonitor = true;
   let uiScale = 1;
   let sidebarCollapsed = false;
+  let focusSearchKey = "Ctrl+S";
+  let toggleSidebarKey = "Ctrl+O";
+  let hotkey = "Alt+Space";
 
   const bootstrap = () =>
-    fixtureBootstrap(displayMode, followCursorMonitor, uiScale, sidebarCollapsed);
+    fixtureBootstrap(
+      displayMode,
+      followCursorMonitor,
+      uiScale,
+      sidebarCollapsed,
+      focusSearchKey,
+      toggleSidebarKey,
+      hotkey,
+    );
 
   const handlers: Record<string, (args: Record<string, unknown>) => unknown> = {
     get_bootstrap_data: bootstrap,
@@ -53,7 +65,12 @@ if (import.meta.env.DEV && !window.__TAURI_INTERNALS__) {
       displayMode = args.displayMode as "grid" | "list";
       return bootstrap();
     },
-    set_hotkey: bootstrap,
+    set_hotkey: (args) => {
+      // A real registration can be refused by the OS; nothing here can be, so
+      // whatever was pressed is taken.
+      hotkey = String(args.hotkey);
+      return bootstrap();
+    },
     set_launch_on_startup: bootstrap,
     set_close_on_launch: bootstrap,
     set_follow_cursor_monitor: (args) => {
@@ -73,6 +90,22 @@ if (import.meta.env.DEV && !window.__TAURI_INTERNALS__) {
     item_target_gone: () => false,
     set_sidebar_collapsed: (args) => {
       sidebarCollapsed = Boolean(args.collapsed);
+      return bootstrap();
+    },
+    // The backend keeps the stored value when the new one does not parse, so a
+    // bad shortcut falls back to what was already there rather than to nothing.
+    set_focus_search_key: (args) => {
+      const value = String(args.value);
+      if (isUsableShortcut(value)) {
+        focusSearchKey = value;
+      }
+      return bootstrap();
+    },
+    set_toggle_sidebar_key: (args) => {
+      const value = String(args.value);
+      if (isUsableShortcut(value)) {
+        toggleSidebarKey = value;
+      }
       return bootstrap();
     },
     sync_window_size: () => bootstrap().settings,
