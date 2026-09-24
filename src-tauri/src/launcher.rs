@@ -6,6 +6,25 @@ use tauri_plugin_opener::OpenerExt;
 
 use crate::models::{LaunchItem, LaunchItemKind};
 
+/// Whether an item's target is no longer on disk.
+///
+/// Only the kinds that name a path can answer this. A URL or a command has
+/// nothing to check and is never reported as gone: when one of those fails to
+/// launch, that is a real failure rather than an invitation to delete the item.
+pub fn target_is_gone(kind: &LaunchItemKind, target: &str) -> bool {
+    let trimmed = target.trim();
+    if trimmed.is_empty() {
+        return true;
+    }
+
+    match kind {
+        LaunchItemKind::Exe | LaunchItemKind::Link | LaunchItemKind::Folder => {
+            !Path::new(trimmed).exists()
+        }
+        LaunchItemKind::Url | LaunchItemKind::Command => false,
+    }
+}
+
 pub fn launch(app: &AppHandle, item: &LaunchItem, force_admin: bool) -> Result<()> {
     let elevate = force_admin || item.run_as_admin;
 
@@ -292,5 +311,32 @@ mod tests {
 
         assert!(describe_shell_error(2, "x.exe").contains("not found"));
         assert!(describe_shell_error(99, "x.exe").contains("refused"));
+    }
+
+    #[test]
+    fn a_path_that_is_no_longer_there_is_gone() {
+        assert!(target_is_gone(
+            &LaunchItemKind::Exe,
+            "C:\\this\\was\\uninstalled\\app.exe"
+        ));
+        assert!(target_is_gone(&LaunchItemKind::Link, "   "));
+        assert!(!target_is_gone(
+            &LaunchItemKind::Folder,
+            env!("CARGO_MANIFEST_DIR")
+        ));
+    }
+
+    #[test]
+    fn a_url_or_a_command_is_never_reported_as_gone() {
+        // Their targets are not paths, so there is nothing to check — and a
+        // failure to launch one must not look like a missing file.
+        assert!(!target_is_gone(
+            &LaunchItemKind::Url,
+            "https://example.test/moved"
+        ));
+        assert!(!target_is_gone(
+            &LaunchItemKind::Command,
+            "not-on-path-at-all --flag"
+        ));
     }
 }

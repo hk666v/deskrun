@@ -43,9 +43,12 @@ function item(
 }
 
 export const fixtureGroups: Group[] = [
-  { id: "group-system", name: "系统", sortOrder: 0 },
-  { id: "group-hkmisc", name: "hk-misc", sortOrder: 1 },
-  { id: "group-proxy", name: "代理", sortOrder: 2 },
+  { id: "group-system", name: "系统", sortOrder: 0, parentId: null },
+  { id: "group-hkmisc", name: "hk-misc", sortOrder: 1, parentId: null },
+  { id: "group-proxy", name: "代理", sortOrder: 2, parentId: null },
+  // One nested group, so the column's indenting, collapsing and subtree counts
+  // are exercised in development rather than only in the real app.
+  { id: "group-proxy-cli", name: "命令行工具", sortOrder: 0, parentId: "group-proxy" },
 ];
 
 export const fixtureItems: LaunchItem[] = [
@@ -146,7 +149,9 @@ export const fixtureItems: LaunchItem[] = [
     target: "D:\\hk-tools",
     note: "工具目录",
     launchCount: 4,
-    groupId: "group-hkmisc",
+    // Filed in the nested group on purpose: it makes the child's own count and
+    // its parent's subtree count different numbers in development.
+    groupId: "group-proxy-cli",
   }),
   item({
     name: "ProjectDiscovery Docs",
@@ -166,6 +171,7 @@ export function fixtureBootstrap(
   displayMode: Settings["displayMode"] = "list",
   followCursorMonitor = true,
   uiScale = 1,
+  sidebarCollapsed = false,
 ): BootstrapData {
   return {
     // Copies, not the arrays themselves: the shim's mutating handlers push into
@@ -185,6 +191,7 @@ export function fixtureBootstrap(
       windowY: null,
       followCursorMonitor,
       uiScale,
+      sidebarCollapsed,
     },
     configDirectory: {
       currentPath: "C:\\Users\\Administrator\\AppData\\Roaming\\com.deskrun.desktop",

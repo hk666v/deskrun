@@ -1,11 +1,10 @@
-import { For, Show, createSignal } from "solid-js";
-import type { ConfigDirectoryInfo, Group, Settings } from "../types";
+import { For, Show } from "solid-js";
+import type { ConfigDirectoryInfo, Settings } from "../types";
 
 interface SettingsPanelProps {
   open: boolean;
   settings: Settings;
   configDirectory: ConfigDirectoryInfo;
-  groups: Group[];
   onClose: () => void;
   onSetHotkey: (value: string) => void;
   onToggleStartup: (value: boolean) => void;
@@ -18,9 +17,6 @@ interface SettingsPanelProps {
   onResetConfigDirectory: () => void;
   onExportConfig: () => void | Promise<void>;
   onImportConfig: () => void | Promise<void>;
-  onCreateGroup: (name: string) => void | Promise<void>;
-  onRenameGroup: (group: Group, name: string) => void | Promise<void>;
-  onDeleteGroup: (group: Group) => void;
 }
 
 const ROW = "border-b border-line py-2.5 last:border-b-0";
@@ -30,18 +26,6 @@ const GHOST_BUTTON =
   "rounded-sharp border border-line px-2 py-1 text-meta text-fg-muted transition-colors duration-100 hover:bg-fill hover:text-fg disabled:cursor-not-allowed disabled:opacity-45";
 
 export function SettingsPanel(props: SettingsPanelProps) {
-  const [newGroupName, setNewGroupName] = createSignal("");
-  const [editingGroupId, setEditingGroupId] = createSignal<string | null>(null);
-  const [editingGroupName, setEditingGroupName] = createSignal("");
-  const [groupError, setGroupError] = createSignal("");
-
-  const groupNameExists = (name: string, excludeId?: string | null) =>
-    props.groups.some(
-      (group) =>
-        group.id !== excludeId &&
-        group.name.trim().toLowerCase() === name.trim().toLowerCase(),
-    );
-
   return (
     <Show when={props.open}>
       <div
@@ -227,135 +211,6 @@ export function SettingsPanel(props: SettingsPanelProps) {
               </div>
             </section>
 
-            <section class="flex flex-col">
-              <h3 class="mb-1 text-label font-medium text-fg">Groups</h3>
-
-              <div class="flex flex-col gap-2 border-b border-line py-2.5">
-                <div class="flex items-center gap-2">
-                  <input
-                    value={newGroupName()}
-                    onInput={(event) => {
-                      setNewGroupName(event.currentTarget.value);
-                      setGroupError("");
-                    }}
-                    class="field-input min-w-0 flex-1"
-                    placeholder="New group name"
-                  />
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      const value = newGroupName().trim();
-                      if (!value) {
-                        return;
-                      }
-
-                      if (groupNameExists(value)) {
-                        setGroupError("Group name already exists. Please choose another one.");
-                        return;
-                      }
-
-                      try {
-                        await props.onCreateGroup(value);
-                        setNewGroupName("");
-                        setGroupError("");
-                      } catch (error) {
-                        setGroupError(
-                          error instanceof Error
-                            ? error.message
-                            : "Unable to create group. Please try another name.",
-                        );
-                      }
-                    }}
-                    class="shrink-0 rounded-sharp bg-signal px-3 py-1.5 text-label font-semibold text-canvas transition-opacity duration-100 hover:opacity-90"
-                  >
-                    Add
-                  </button>
-                </div>
-
-                <Show when={groupError()}>
-                  <div class="rounded-sharp border border-danger-soft px-2 py-1.5 text-meta text-danger">
-                    {groupError()}
-                  </div>
-                </Show>
-              </div>
-
-              <div class="flex flex-col">
-                <For each={props.groups}>
-                  {(group) => (
-                    <div class="border-b border-line py-2 last:border-b-0">
-                      <Show
-                        when={editingGroupId() === group.id}
-                        fallback={
-                          <div class="flex items-center justify-between gap-3">
-                            <span class="truncate text-label text-fg-muted">{group.name}</span>
-                            <div class="flex shrink-0 items-center gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setEditingGroupId(group.id);
-                                  setEditingGroupName(group.name);
-                                }}
-                                class={GHOST_BUTTON}
-                              >
-                                Rename
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => props.onDeleteGroup(group)}
-                                class="rounded-sharp border border-danger-soft px-2 py-1 text-meta text-danger transition-colors duration-100 hover:bg-danger-soft"
-                              >
-                                Delete
-                              </button>
-                            </div>
-                          </div>
-                        }
-                      >
-                        <div class="flex items-center gap-2">
-                          <input
-                            value={editingGroupName()}
-                            onInput={(event) => {
-                              setEditingGroupName(event.currentTarget.value);
-                              setGroupError("");
-                            }}
-                            class="field-input min-w-0 flex-1"
-                          />
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              const value = editingGroupName().trim();
-                              if (!value) {
-                                setGroupError("Group name cannot be empty.");
-                                return;
-                              }
-
-                              if (groupNameExists(value, group.id)) {
-                                setGroupError("Group name already exists. Please choose another one.");
-                                return;
-                              }
-
-                              try {
-                                await props.onRenameGroup(group, value);
-                                setEditingGroupId(null);
-                                setGroupError("");
-                              } catch (error) {
-                                setGroupError(
-                                  error instanceof Error
-                                    ? error.message
-                                    : "Unable to rename group. Please try another name.",
-                                );
-                              }
-                            }}
-                            class="shrink-0 rounded-sharp bg-signal px-2 py-1 text-meta font-semibold text-canvas transition-opacity duration-100 hover:opacity-90"
-                          >
-                            Save
-                          </button>
-                        </div>
-                      </Show>
-                    </div>
-                  )}
-                </For>
-              </div>
-            </section>
           </div>
         </aside>
       </div>

@@ -1,4 +1,5 @@
 use std::{
+    collections::{HashMap, HashSet},
     fs,
     io::Write,
     path::{Path, PathBuf},
@@ -249,6 +250,11 @@ impl StorageState {
     /// disk is the one the interface is actually running at.
     pub fn set_ui_scale(&mut self, scale: f64) -> Result<()> {
         self.settings.ui_scale = normalized_ui_scale(scale);
+        self.persist_settings()
+    }
+
+    pub fn set_sidebar_collapsed(&mut self, collapsed: bool) -> Result<()> {
+        self.settings.sidebar_collapsed = collapsed;
         self.persist_settings()
     }
 
@@ -647,13 +653,26 @@ impl StorageState {
         Ok(self.sorted_items())
     }
 
-    pub fn create_group(&mut self, name: String) -> Result<Group> {
+    pub fn create_group(&mut self, name: String, parent_id: Option<String>) -> Result<Group> {
         let normalized_name = normalize_group_name(&name)?;
         ensure_group_name_available(&self.items_data.groups, &normalized_name, None)?;
+
+        if let Some(parent) = parent_id.as_deref() {
+            if !self
+                .items_data
+                .groups
+                .iter()
+                .any(|group| group.id == parent)
+            {
+                return Err(anyhow!("group not found"));
+            }
+        }
+
         let group = Group {
             id: Uuid::new_v4().to_string(),
             name: normalized_name,
-            sort_order: self.items_data.groups.len() as i32,
+            sort_order: self.next_group_sort_order(parent_id.as_deref()),
+            parent_id,
         };
         self.items_data.groups.push(group.clone());
         self.persist_items()?;
@@ -674,7 +693,23 @@ impl StorageState {
         Ok(self.sorted_groups())
     }
 
+    /// Deletes a group. Its own items are ungrouped, and the groups inside it
+    /// move up to where it was: deleting a heading is not a reason to lose
+    /// everything filed under it.
     pub fn delete_group(&mut self, group_id: &str) -> Result<Vec<Group>> {
+        let parent_id = self
+            .items_data
+            .groups
+            .iter()
+            .find(|group| group.id == group_id)
+            .and_then(|group| group.parent_id.clone());
+
+        for group in &mut self.items_data.groups {
+            if group.parent_id.as_deref() == Some(group_id) {
+                group.parent_id = parent_id.clone();
+            }
+        }
+
         self.items_data.groups.retain(|group| group.id != group_id);
         for item in &mut self.items_data.items {
             if item.group_id.as_deref() == Some(group_id) {
@@ -686,17 +721,73 @@ impl StorageState {
         Ok(self.sorted_groups())
     }
 
-    pub fn reorder_groups(&mut self, group_ids: Vec<String>) -> Result<Vec<Group>> {
-        for (index, group_id) in group_ids.iter().enumerate() {
+    /// Puts a group inside another one, or back at the top level, at a chosen
+    /// place among its new siblings.
+    pub fn move_group(
+        &mut self,
+        group_id: &str,
+        parent_id: Option<String>,
+        before_id: Option<String>,
+    ) -> Result<Vec<Group>> {
+        if !self
+            .items_data
+            .groups
+            .iter()
+            .any(|group| group.id == group_id)
+        {
+            return Err(anyhow!("group not found"));
+        }
+
+        if let Some(parent) = parent_id.as_deref() {
+            if !self
+                .items_data
+                .groups
+                .iter()
+                .any(|group| group.id == parent)
+            {
+                return Err(anyhow!("group not found"));
+            }
+            // A group cannot go inside itself, or inside anything filed under
+            // it: that would cut the branch it is carried on off the tree.
+            if parent == group_id || self.is_descendant_of(parent, group_id) {
+                return Err(anyhow!("a group cannot be moved inside itself"));
+            }
+        }
+
+        // Work out the new order of those siblings before writing anything, so
+        // the group lands exactly where the drop pointed rather than wherever a
+        // tie in sort order happens to fall.
+        let mut siblings: Vec<(i32, String)> = self
+            .items_data
+            .groups
+            .iter()
+            .filter(|group| group.id != group_id && group.parent_id == parent_id)
+            .map(|group| (group.sort_order, group.id.clone()))
+            .collect();
+        siblings.sort();
+
+        let mut order: Vec<String> = siblings.into_iter().map(|(_, id)| id).collect();
+        let position = match before_id {
+            Some(before) => order
+                .iter()
+                .position(|id| *id == before)
+                .unwrap_or(order.len()),
+            None => order.len(),
+        };
+        order.insert(position, group_id.to_string());
+
+        for (index, id) in order.iter().enumerate() {
             if let Some(group) = self
                 .items_data
                 .groups
                 .iter_mut()
-                .find(|group| group.id == *group_id)
+                .find(|group| group.id == *id)
             {
+                group.parent_id = parent_id.clone();
                 group.sort_order = index as i32;
             }
         }
+
         self.persist_items()?;
         Ok(self.sorted_groups())
     }
@@ -732,9 +823,39 @@ impl StorageState {
         // the interface has no way back to a sane size from inside itself.
         self.settings.ui_scale = normalized_ui_scale(self.settings.ui_scale);
 
-        self.items_data.groups.sort_by_key(|group| group.sort_order);
-        for (index, group) in self.items_data.groups.iter_mut().enumerate() {
-            group.sort_order = index as i32;
+        // A group that names a parent that is gone, or that is sitting inside
+        // one of its own descendants, is pulled back to the top level. Only a
+        // hand-edited config can get there, and the sidebar is drawn from this
+        // tree — a cycle would make it endless.
+        let known: HashSet<String> = self
+            .items_data
+            .groups
+            .iter()
+            .map(|group| group.id.clone())
+            .collect();
+        let parents: HashMap<String, Option<String>> = self
+            .items_data
+            .groups
+            .iter()
+            .map(|group| (group.id.clone(), group.parent_id.clone()))
+            .collect();
+        for group in &mut self.items_data.groups {
+            group.parent_id =
+                normalize_parent(&group.id, group.parent_id.clone(), &known, &parents);
+        }
+
+        // Siblings are numbered inside their own parent, so the column can be
+        // drawn one parent at a time.
+        self.items_data.groups.sort_by(|left, right| {
+            left.parent_id
+                .cmp(&right.parent_id)
+                .then(left.sort_order.cmp(&right.sort_order))
+        });
+        let mut next_order: HashMap<Option<String>, i32> = HashMap::new();
+        for group in &mut self.items_data.groups {
+            let order = next_order.entry(group.parent_id.clone()).or_insert(0);
+            group.sort_order = *order;
+            *order += 1;
         }
 
         self.items_data.items.sort_by(|left, right| {
@@ -769,10 +890,47 @@ impl StorageState {
         items
     }
 
+    /// The groups in the order the sidebar draws them: each one followed by the
+    /// groups filed inside it, so a reader can walk the list and indent by
+    /// depth without building the tree again.
     fn sorted_groups(&self) -> Vec<Group> {
-        let mut groups = self.items_data.groups.clone();
-        groups.sort_by_key(|group| group.sort_order);
-        groups
+        flatten_groups(&self.items_data.groups)
+    }
+
+    fn next_group_sort_order(&self, parent_id: Option<&str>) -> i32 {
+        self.items_data
+            .groups
+            .iter()
+            .filter(|group| group.parent_id.as_deref() == parent_id)
+            .count() as i32
+    }
+
+    /// Whether `group_id` sits anywhere under `ancestor_id`.
+    fn is_descendant_of(&self, group_id: &str, ancestor_id: &str) -> bool {
+        let mut current = self
+            .items_data
+            .groups
+            .iter()
+            .find(|group| group.id == group_id)
+            .and_then(|group| group.parent_id.clone());
+
+        let mut seen = HashSet::new();
+        while let Some(id) = current {
+            if id == ancestor_id {
+                return true;
+            }
+            if !seen.insert(id.clone()) {
+                return false;
+            }
+            current = self
+                .items_data
+                .groups
+                .iter()
+                .find(|group| group.id == id)
+                .and_then(|group| group.parent_id.clone());
+        }
+
+        false
     }
 
     fn next_item_sort_order(&self, group_id: Option<&str>) -> i32 {
@@ -948,6 +1106,60 @@ fn normalize_group_name(value: &str) -> Result<String> {
     }
 
     Ok(trimmed.to_string())
+}
+
+/// Walks the group tree depth first: a group, then the groups filed inside it,
+/// in the order they are shown. The sidebar draws whatever comes back in order
+/// and indents each group by how deep it is.
+fn flatten_groups(groups: &[Group]) -> Vec<Group> {
+    let mut children: HashMap<Option<String>, Vec<&Group>> = HashMap::new();
+    for group in groups {
+        children
+            .entry(group.parent_id.clone())
+            .or_default()
+            .push(group);
+    }
+    for list in children.values_mut() {
+        list.sort_by_key(|group| group.sort_order);
+    }
+
+    let mut ordered = Vec::with_capacity(groups.len());
+    let mut pending: Vec<&Group> = children.get(&None).cloned().unwrap_or_default();
+    pending.reverse();
+
+    while let Some(group) = pending.pop() {
+        ordered.push(group.clone());
+        if let Some(nested) = children.get(&Some(group.id.clone())) {
+            for child in nested.iter().rev() {
+                pending.push(child);
+            }
+        }
+    }
+
+    ordered
+}
+
+/// The parent a group should keep: the one it names, unless that group is gone
+/// or the chain loops back through this group. Both are only reachable by hand
+/// editing the config, and both would leave the sidebar unrenderable.
+fn normalize_parent(
+    id: &str,
+    parent: Option<String>,
+    known: &HashSet<String>,
+    parents: &HashMap<String, Option<String>>,
+) -> Option<String> {
+    let mut current = parent.clone();
+    let mut seen = HashSet::new();
+    seen.insert(id.to_string());
+
+    while let Some(candidate) = current {
+        if !known.contains(&candidate) || !seen.insert(candidate.clone()) {
+            return None;
+        }
+        current = parents.get(&candidate).cloned().flatten();
+    }
+
+    parent
 }
 
 fn ensure_group_name_available(
@@ -1154,5 +1366,84 @@ mod tests {
         assert!(same_directory(&dir, &dir.join(".")));
         assert!(!same_directory(&dir, &dir.join("nested")));
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    fn group(id: &str, parent: Option<&str>, sort_order: i32) -> Group {
+        Group {
+            id: id.to_string(),
+            name: id.to_string(),
+            sort_order,
+            parent_id: parent.map(str::to_string),
+        }
+    }
+
+    fn ids(groups: &[Group]) -> Vec<&str> {
+        groups.iter().map(|entry| entry.id.as_str()).collect()
+    }
+
+    #[test]
+    fn groups_are_listed_with_their_children_under_them() {
+        let groups = vec![
+            group("a", None, 0),
+            group("b", None, 1),
+            group("a-1", Some("a"), 0),
+            group("a-2", Some("a"), 1),
+            group("a-1-x", Some("a-1"), 0),
+        ];
+
+        assert_eq!(
+            ids(&flatten_groups(&groups)),
+            ["a", "a-1", "a-1-x", "a-2", "b"]
+        );
+    }
+
+    #[test]
+    fn siblings_keep_their_own_order() {
+        let groups = vec![
+            group("second", None, 1),
+            group("first", None, 0),
+            group("child", Some("second"), 0),
+        ];
+
+        assert_eq!(ids(&flatten_groups(&groups)), ["first", "second", "child"]);
+    }
+
+    #[test]
+    fn a_parent_that_is_gone_sends_a_group_back_to_the_top() {
+        let known = HashSet::from(["a".to_string()]);
+        let parents = HashMap::from([("a".to_string(), None)]);
+
+        assert_eq!(
+            normalize_parent("a", Some("gone".to_string()), &known, &parents),
+            None
+        );
+    }
+
+    #[test]
+    fn a_group_cannot_be_its_own_ancestor() {
+        let known = HashSet::from(["a".to_string(), "b".to_string()]);
+        let parents = HashMap::from([
+            ("a".to_string(), Some("b".to_string())),
+            ("b".to_string(), Some("a".to_string())),
+        ]);
+
+        assert_eq!(
+            normalize_parent("a", Some("b".to_string()), &known, &parents),
+            None
+        );
+    }
+
+    #[test]
+    fn a_sound_parent_is_left_alone() {
+        let known = HashSet::from(["a".to_string(), "b".to_string()]);
+        let parents = HashMap::from([
+            ("a".to_string(), None),
+            ("b".to_string(), Some("a".to_string())),
+        ]);
+
+        assert_eq!(
+            normalize_parent("b", Some("a".to_string()), &known, &parents),
+            Some("a".to_string())
+        );
     }
 }

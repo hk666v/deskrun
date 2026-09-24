@@ -213,12 +213,17 @@
   transition-timing-function: var(--ease-sharp);
 }
 
-/* A warm corner of light in the window. It does no job — it is what keeps a
-   screen of near-black from reading as switched off. */
+/* A corner of light in the window. It does no job — it is what keeps a screen
+   of near-black from reading as switched off.
+   Neutral, not the accent: every surface here is the same cool blue-black, and
+   an amber light behind them turned the background into a different material
+   that the panels then looked cut out of. It is also deliberately the faintest
+   fill in the palette — light that out-shines the panels makes them look like
+   holes rather than surfaces. */
 @utility ambient-glow {
   background-image: radial-gradient(
     120% 90% at 14% -10%,
-    var(--color-signal-soft),
+    var(--color-fill),
     transparent 55%
   );
 }

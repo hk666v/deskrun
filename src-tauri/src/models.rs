@@ -57,6 +57,10 @@ pub struct Group {
     pub id: String,
     pub name: String,
     pub sort_order: i32,
+    /// The group this one sits inside, or `None` for the top level. Groups are
+    /// as deep as the user makes them; nothing here assumes a depth.
+    #[serde(default)]
+    pub parent_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -76,6 +80,9 @@ pub struct Settings {
     pub follow_cursor_monitor: bool,
     /// Interface scale, applied as a webview zoom. 1.0 is the designed size.
     pub ui_scale: f64,
+    /// Whether the group sidebar is out of the way. Remembered because it is a
+    /// decision about the window, and a launcher is opened many times a day.
+    pub sidebar_collapsed: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -130,6 +137,7 @@ impl Default for Settings {
             window_y: None,
             follow_cursor_monitor: true,
             ui_scale: 1.0,
+            sidebar_collapsed: false,
         }
     }
 }

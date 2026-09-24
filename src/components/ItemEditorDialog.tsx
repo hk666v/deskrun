@@ -1,6 +1,7 @@
 import { Show, createEffect, createSignal } from "solid-js";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { Group, LaunchItem } from "../types";
+import { flattenGroups } from "../lib/group-tree";
 
 interface ItemEditorDialogProps {
   open: boolean;
@@ -298,8 +299,13 @@ export function ItemEditorDialog(props: ItemEditorDialogProps) {
                 class="field-input field-select"
               >
                 <option value="">Ungrouped</option>
-                {props.groups.map((group) => (
-                  <option value={group.id}>{group.name}</option>
+                {/* Indented rather than sorted flat: a group inside another one
+                    has to look like it, or the two levels read as one long list
+                    of names that happen to be in a strange order. */}
+                {flattenGroups(props.groups, () => true).map((row) => (
+                  <option value={row.group.id}>
+                    {`${"　".repeat(row.depth)}${row.group.name}`}
+                  </option>
                 ))}
               </select>
             </Field>

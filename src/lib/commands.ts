@@ -30,8 +30,8 @@ export function reorderItems(itemIds: string[]) {
   return invoke<LaunchItem[]>("reorder_items", { itemIds });
 }
 
-export function createGroup(name: string) {
-  return invoke<Group>("create_group", { name });
+export function createGroup(name: string, parentId: string | null = null) {
+  return invoke<Group>("create_group", { name, parentId });
 }
 
 export function renameGroup(groupId: string, name: string) {
@@ -42,8 +42,14 @@ export function deleteGroup(groupId: string) {
   return invoke<Group[]>("delete_group", { groupId });
 }
 
-export function reorderGroups(groupIds: string[]) {
-  return invoke<Group[]>("reorder_groups", { groupIds });
+/// Puts a group inside another one, or back at the top level, at a chosen place
+/// among its new siblings. `beforeId` of null means last.
+export function moveGroup(
+  groupId: string,
+  parentId: string | null,
+  beforeId: string | null,
+) {
+  return invoke<Group[]>("move_group", { groupId, parentId, beforeId });
 }
 
 export function launchItem(itemId: string) {
@@ -54,6 +60,12 @@ export function launchItem(itemId: string) {
 /// prompt appears even for something normally launched unelevated.
 export function launchItemAsAdmin(itemId: string) {
   return invoke<LaunchItem>("launch_item_as_admin", { itemId });
+}
+
+/// Whether the item's target is no longer on disk. Asked after a launch has
+/// failed, to tell "this was uninstalled" from everything else.
+export function itemTargetGone(itemId: string) {
+  return invoke<boolean>("item_target_gone", { itemId });
 }
 
 export function duplicateItem(itemId: string) {
@@ -94,6 +106,10 @@ export function setFollowCursorMonitor(follow: boolean) {
 
 export function setUiScale(scale: number) {
   return invoke<BootstrapData>("set_ui_scale", { scale });
+}
+
+export function setSidebarCollapsed(collapsed: boolean) {
+  return invoke<BootstrapData>("set_sidebar_collapsed", { collapsed });
 }
 
 export function setDisplayMode(displayMode: "grid" | "list") {

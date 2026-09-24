@@ -29,6 +29,8 @@ export interface Group {
   id: string;
   name: string;
   sortOrder: number;
+  /** The group this one sits inside, or null for the top level. */
+  parentId?: string | null;
 }
 
 export interface Settings {
@@ -45,6 +47,8 @@ export interface Settings {
   followCursorMonitor: boolean;
   /** Interface scale, applied as a webview zoom. 1 is the designed size. */
   uiScale: number;
+  /** Whether the group sidebar is out of the way. */
+  sidebarCollapsed: boolean;
 }
 
 export interface ConfigDirectoryInfo {

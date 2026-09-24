@@ -41,8 +41,10 @@ if (import.meta.env.DEV && !window.__TAURI_INTERNALS__) {
   let displayMode: "grid" | "list" = "list";
   let followCursorMonitor = true;
   let uiScale = 1;
+  let sidebarCollapsed = false;
 
-  const bootstrap = () => fixtureBootstrap(displayMode, followCursorMonitor, uiScale);
+  const bootstrap = () =>
+    fixtureBootstrap(displayMode, followCursorMonitor, uiScale, sidebarCollapsed);
 
   const handlers: Record<string, (args: Record<string, unknown>) => unknown> = {
     get_bootstrap_data: bootstrap,
@@ -65,16 +67,85 @@ if (import.meta.env.DEV && !window.__TAURI_INTERNALS__) {
       uiScale = Number(args.scale);
       return bootstrap();
     },
+    // The fixtures' targets are real paths on this machine, but nothing in the
+    // browser can tell whether they are there — and a launch failure here is the
+    // shim's own, not a missing file. Never worth offering to delete over.
+    item_target_gone: () => false,
+    set_sidebar_collapsed: (args) => {
+      sidebarCollapsed = Boolean(args.collapsed);
+      return bootstrap();
+    },
     sync_window_size: () => bootstrap().settings,
     set_config_directory: bootstrap,
-    reorder_groups: () => fixtureGroups,
+    rename_group: (args) => {
+      const name = String(args.name).trim();
+      const group = fixtureGroups.find((entry) => entry.id === args.groupId);
+      if (!group) {
+        return Promise.reject("group not found");
+      }
+      if (
+        fixtureGroups.some(
+          (entry) =>
+            entry.id !== group.id && entry.name.toLowerCase() === name.toLowerCase(),
+        )
+      ) {
+        return Promise.reject("group name already exists");
+      }
+
+      group.name = name;
+      return [...fixtureGroups];
+    },
+    delete_group: (args) => {
+      const index = fixtureGroups.findIndex((entry) => entry.id === args.groupId);
+      if (index >= 0) {
+        const parentId = fixtureGroups[index].parentId ?? null;
+        // The groups inside it move up a level, the way the backend leaves them.
+        for (const entry of fixtureGroups) {
+          if ((entry.parentId ?? null) === args.groupId) {
+            entry.parentId = parentId;
+          }
+        }
+        fixtureGroups.splice(index, 1);
+      }
+      return [...fixtureGroups];
+    },
+    move_group: (args) => {
+      const parentId = (args.parentId as string | null) ?? null;
+      const beforeId = (args.beforeId as string | null) ?? null;
+      const group = fixtureGroups.find((entry) => entry.id === args.groupId);
+      if (!group) {
+        return Promise.reject("group not found");
+      }
+
+      // The same shape as the backend: set the parent, then renumber the new
+      // siblings with the moved group slotted in where the drop pointed.
+      const siblings = fixtureGroups
+        .filter((entry) => entry.id !== group.id && (entry.parentId ?? null) === parentId)
+        .sort((left, right) => left.sortOrder - right.sortOrder);
+      const order = siblings.map((entry) => entry.id);
+      const position = beforeId ? order.indexOf(beforeId) : -1;
+      order.splice(position < 0 ? order.length : position, 0, group.id);
+
+      order.forEach((id, index) => {
+        const entry = fixtureGroups.find((candidate) => candidate.id === id);
+        if (entry) {
+          entry.parentId = parentId;
+          entry.sortOrder = index;
+        }
+      });
+      return [...fixtureGroups];
+    },
     create_group: (args) => {
       const name = String(args.name).trim();
+      const parentId = (args.parentId as string | null) ?? null;
 
       // Mirrors the backend's uniqueness rule, so the dev environment rejects
       // exactly the names the real one does.
       if (fixtureGroups.some((group) => group.name.toLowerCase() === name.toLowerCase())) {
         return Promise.reject("group name already exists");
+      }
+      if (parentId && !fixtureGroups.some((group) => group.id === parentId)) {
+        return Promise.reject("group not found");
       }
 
       // Persist, then return the single new group — the shape the real command
@@ -82,7 +153,8 @@ if (import.meta.env.DEV && !window.__TAURI_INTERNALS__) {
       const group = {
         id: `fixture-group-${Date.now()}`,
         name,
-        sortOrder: fixtureGroups.length,
+        sortOrder: fixtureGroups.filter((entry) => (entry.parentId ?? null) === parentId).length,
+        parentId,
       };
       fixtureGroups.push(group);
       return group;

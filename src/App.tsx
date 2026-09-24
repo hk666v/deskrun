@@ -14,11 +14,12 @@ import {
   importConfig,
   importDiscoveryCandidates,
   importPaths,
+  itemTargetGone,
   launchItem,
   launchItemAsAdmin,
+  moveGroup,
   openConfigDirectory,
   renameGroup,
-  reorderGroups,
   reorderItems,
   scanDiscoveryCandidates,
   setConfigDirectory,
@@ -27,12 +28,13 @@ import {
   setFollowCursorMonitor,
   setHotkey,
   setLaunchOnStartup,
+  setSidebarCollapsed,
   setUiScale,
   syncWindowSize,
   toggleFavorite,
   updateItem,
 } from "./lib/commands";
-import { GroupTabs } from "./components/GroupTabs";
+import { GroupSidebar } from "./components/GroupSidebar";
 import { DiscoveryPanel } from "./components/DiscoveryPanel";
 import { ItemEditorDialog } from "./components/ItemEditorDialog";
 import { ItemContextMenu } from "./components/ItemContextMenu";
@@ -43,13 +45,21 @@ import { SettingsPanel } from "./components/SettingsPanel";
 import { copyText } from "./lib/clipboard";
 import { buildCommandPreview } from "./lib/command-preview";
 import { displayOrder } from "./lib/item-order";
+import { childrenOf, flattenGroups, subtreeIds } from "./lib/group-tree";
 import { buildQueryActions, type QueryAction } from "./lib/query-actions";
-import { DISCOVERY_VIEW_ID, FAVORITES_VIEW_ID, RECENT_VIEW_ID, stepView, viewIds } from "./lib/views";
+import {
+  DISCOVERY_VIEW_ID,
+  FAVORITES_VIEW_ID,
+  RECENT_VIEW_ID,
+  SYSTEM_VIEWS,
+  stepView,
+} from "./lib/views";
 import { revealItemLocation } from "./lib/location";
 import {
   buildSearchIndexEntry,
   calculateSearchScore,
   matchesSearch,
+  rankSearchResults,
 } from "./lib/search";
 import type {
   ConfigDirectoryInfo,
@@ -92,6 +102,7 @@ const DEFAULT_SETTINGS: Settings = {
   windowHeight: 560,
   followCursorMonitor: true,
   uiScale: 1,
+  sidebarCollapsed: false,
 };
 
 const DEFAULT_CONFIG_DIRECTORY: ConfigDirectoryInfo = {
@@ -154,6 +165,13 @@ function App() {
   const [settingsOpen, setSettingsOpen] = createSignal(false);
   const [dialogBusy, setDialogBusy] = createSignal(false);
   const [draggingExternal, setDraggingExternal] = createSignal(false);
+  /// Which column the arrow keys are working in. The caret stays in the search
+  /// box either way — typing always means searching — so this is only about
+  /// where up, down, left and right go.
+  const [pane, setPane] = createSignal<"groups" | "results">("results");
+  /// Which group branches are open. The column draws them and the up/down keys
+  /// walk them, so both read the answer from here.
+  const [collapsedGroups, setCollapsedGroups] = createSignal<Set<string>>(new Set());
   /// Drives the entrance animation. The window is hidden and shown rather than
   /// remounted, so nothing plays on its own.
   ///
@@ -213,8 +231,20 @@ function App() {
   const visibleItems = createMemo(() => {
     const term = query().trim();
     const view = currentGroupId();
-    return searchIndex()
+
+    // A query is not confined to the view it was typed in. Typing is how the
+    // user says what they want, and what they want is usually something pinned
+    // or something they have run — the two bands `rankSearchResults` leads with.
+    // Browsing is the opposite question: with an empty box, "which view is this
+    // item in" is exactly what the user is asking, so the filter only applies
+    // then. Discovery keeps its own panel either way.
+    const browsing = term.length === 0;
+
+    const entries = searchIndex()
       .filter(({ item }) => {
+        if (!browsing) {
+          return view !== DISCOVERY_VIEW_ID;
+        }
         if (view === FAVORITES_VIEW_ID) {
           return item.isFavorite;
         }
@@ -224,24 +254,23 @@ function App() {
         if (view === DISCOVERY_VIEW_ID) {
           return false;
         }
-        return view ? item.groupId === view : true;
+        const scoped = visibleGroupIds();
+        return scoped ? item.groupId !== null && scoped.has(item.groupId) : true;
       })
       .map(({ item, search }) => ({
         item,
-        score: term ? calculateSearchScore(search, item, term) : 0,
+        score: browsing ? 0 : calculateSearchScore(search, item, term),
         matches: matchesSearch(search, term),
       }))
-      .filter(({ matches }) => matches)
-      .sort((left, right) => {
-        if (term) {
-          return (
-            right.score - left.score ||
-            defaultItemSort(left.item, right.item, view)
-          );
-        }
-        return defaultItemSort(left.item, right.item, view);
-      })
-      .map(({ item }) => item);
+      .filter(({ matches }) => matches);
+
+    if (browsing) {
+      return entries
+        .sort((left, right) => defaultItemSort(left.item, right.item, view))
+        .map(({ item }) => item);
+    }
+
+    return rankSearchResults(entries).map(({ item }) => item);
   });
 
   /// Offered only when nothing matched, so a real item always wins over a guess
@@ -252,6 +281,42 @@ function App() {
       : [],
   );
 
+  /// What each view holds, for the counts beside them in the sidebar. The same
+  /// conditions the view filters on, counted over everything rather than over
+  /// whatever the current query happens to match.
+  const viewCounts = createMemo(() => {
+    const all = items();
+    const counts = new Map<string | null, number>();
+    counts.set(null, all.length);
+    counts.set(FAVORITES_VIEW_ID, all.filter((item) => item.isFavorite).length);
+    counts.set(RECENT_VIEW_ID, all.filter((item) => item.lastLaunchedAt !== null).length);
+    counts.set(
+      DISCOVERY_VIEW_ID,
+      discoveryCandidates().filter((candidate) => !candidate.alreadyExists).length,
+    );
+    for (const group of groups()) {
+      // A group counts what selecting it shows: its own items and everything
+      // filed in the groups inside it.
+      const ids = new Set(subtreeIds(groups(), group.id));
+      counts.set(
+        group.id,
+        all.filter((item) => item.groupId !== null && ids.has(item.groupId)).length,
+      );
+    }
+    return counts;
+  });
+
+  /// The groups the current view shows. Selecting a group shows what is filed
+  /// in it *and* in the groups inside it, the way a folder shows what is in its
+  /// subfolders — which is the point of putting one group inside another.
+  const visibleGroupIds = createMemo(() => {
+    const view = currentGroupId();
+    if (!view || view === FAVORITES_VIEW_ID || view === RECENT_VIEW_ID || view === DISCOVERY_VIEW_ID) {
+      return null;
+    }
+    return new Set(subtreeIds(groups(), view));
+  });
+
   const shouldSectionListItems = createMemo(
     () =>
       settings().displayMode === "list" &&
@@ -261,9 +326,34 @@ function App() {
       currentGroupId() !== DISCOVERY_VIEW_ID,
   );
 
-  /// The tabs in the order they are drawn, which is the order the left and
-  /// right keys walk.
-  const viewOrder = createMemo(() => viewIds(groups()));
+  const isGroupExpanded = (groupId: string) => !collapsedGroups().has(groupId);
+
+  /// Opening and closing a branch. Handing back the same set when nothing
+  /// changes matters: a new one would rebuild every row, and the inline editor
+  /// that was just opened lives in one of them.
+  const setGroupExpanded = (groupId: string, expanded: boolean) => {
+    setCollapsedGroups((current) => {
+      if (expanded === !current.has(groupId)) {
+        return current;
+      }
+
+      const next = new Set(current);
+      if (expanded) {
+        next.delete(groupId);
+      } else {
+        next.add(groupId);
+      }
+      return next;
+    });
+  };
+
+  /// The rows the sidebar draws, in order: the built-in views and then the
+  /// groups, with closed branches left out. Up and down walk exactly this, so
+  /// the keyboard never lands on a row the user cannot see.
+  const viewSteps = createMemo<Array<string | null>>(() => [
+    ...SYSTEM_VIEWS.map((view) => view.id),
+    ...flattenGroups(groups(), isGroupExpanded).map((row) => row.group.id),
+  ]);
 
   const syncSelection = (nextItems: LaunchItem[]) => {
     if (currentGroupId() === DISCOVERY_VIEW_ID) {
@@ -360,6 +450,32 @@ function App() {
     feedbackTimer = window.setTimeout(() => setFeedback(""), 2200);
   };
 
+  /// Queues the in-app delete confirm. Only the wording differs between asking
+  /// for a delete and finding that there is nothing left to launch; the action
+  /// is the same one either way.
+  const confirmDelete = (item: LaunchItem, message: string) => {
+    setPendingAction({
+      message,
+      confirm: "Delete",
+      action: async () => {
+        await deleteItem(item.id);
+        setItems((current) => current.filter((entry) => entry.id !== item.id));
+        notify("Launcher item removed");
+      },
+    });
+  };
+
+  /// Whether the item's target has gone from disk. Everything else a launch can
+  /// fail with — a command that is not on PATH, a refused UAC prompt — answers
+  /// false, because those are failures to report rather than items to delete.
+  const targetIsGone = async (item: LaunchItem) => {
+    try {
+      return await itemTargetGone(item.id);
+    } catch {
+      return false;
+    }
+  };
+
   /// Runs a command and surfaces a rejection. Several of these calls used to
   /// fail completely silently — saving an item with an empty command field did
   /// nothing at all, with no error and no change to the dialog.
@@ -370,6 +486,14 @@ function App() {
       notify(`${failureMessage}: ${describeError(error)}`);
     }
   };
+
+  /// Hiding the sidebar is a decision about the window rather than about the
+  /// moment, so it is remembered: a launcher is opened dozens of times a day,
+  /// and putting the column back every time would make the setting useless.
+  const toggleSidebar = () =>
+    run(async () => {
+      applySettingsResponse(await setSidebarCollapsed(!settings().sidebarCollapsed));
+    }, "Could not change the sidebar");
 
   /// Runs an action that opens a native window or hands a folder to the shell.
   /// The WebView loses focus while that is on screen, and the focus handler
@@ -568,6 +692,17 @@ function App() {
     try {
       await performLaunch(item);
     } catch (error) {
+      // A target that has gone is the one launch failure the user can do
+      // something about: the item will never work again, and the only reason it
+      // is still in the list is that nobody has removed it.
+      if (await targetIsGone(item)) {
+        confirmDelete(
+          item,
+          `“${item.name}” points at something that is no longer there. Delete it?`,
+        );
+        return;
+      }
+
       notify(`Launch failed: ${describeError(error)}`);
     }
   };
@@ -633,15 +768,7 @@ function App() {
     clearHoverPreview();
     // Confirmed in-app rather than through a native dialog, which would take
     // focus off the webview and make the launcher hide itself.
-    setPendingAction({
-      message: `Delete “${item.name}”? This cannot be undone.`,
-      confirm: "Delete",
-      action: async () => {
-        await deleteItem(item.id);
-        setItems((current) => current.filter((entry) => entry.id !== item.id));
-        notify("Launcher item removed");
-      },
-    });
+    confirmDelete(item, `Delete “${item.name}”? This cannot be undone.`);
   };
 
   const handleCopyCommand = async (item: LaunchItem) => {
@@ -704,8 +831,14 @@ function App() {
 
   /// Reports whether the group was created so the tab strip's inline editor can
   /// stay open when the name is rejected.
-  const handleCreateGroup = async (name: string): Promise<boolean> => {    try {
-      const group = await createGroup(name);
+  /// Reports whether the group was created so the sidebar's inline editor can
+  /// stay open when the name is rejected.
+  const handleCreateGroup = async (
+    name: string,
+    parentId: string | null,
+  ): Promise<boolean> => {
+    try {
+      const group = await createGroup(name, parentId);
       setGroups((current) => [...current, group]);
       notify(`Group “${group.name}” created`);
       return true;
@@ -733,24 +866,61 @@ function App() {
     setItems(updatedItems);
   };
 
-  const handleReorderGroups = async (
-    fromId: string,
-    toId: string,
-    placement: "before" | "after",
-  ) => {
-    const nextIds = groups().map((group) => group.id);
-    const fromIndex = nextIds.indexOf(fromId);
-    const toIndex = nextIds.indexOf(toId);
-    if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) {
-      return;
+  /// Renames a group from the sidebar, and answers whether it worked so the row
+  /// can keep the name in its editor when the backend rejected it.
+  const handleRenameGroup = async (group: Group, name: string): Promise<boolean> => {
+    try {
+      setGroups(await renameGroup(group.id, name));
+      notify(`Group renamed to “${name}”`);
+      return true;
+    } catch (error) {
+      notify(`Could not rename the group: ${describeError(error)}`);
+      return false;
     }
+  };
 
-    const [moved] = nextIds.splice(fromIndex, 1);
-    const targetIndex = nextIds.indexOf(toId);
-    const insertIndex = placement === "after" ? targetIndex + 1 : targetIndex;
-    nextIds.splice(insertIndex, 0, moved);
-    const updatedGroups = await reorderGroups(nextIds);
-    setGroups(updatedGroups);
+  /// Deleting a group makes its own items ungrouped and takes the groups inside
+  /// it up a level, so the confirm says both rather than only counting items.
+  const handleDeleteGroup = (group: Group) => {
+    const nested = childrenOf(groups(), group.id).length;
+    const affected = items().filter((item) => item.groupId === group.id).length;
+    const consequences = [
+      affected > 0 ? `${affected} item(s) will move to Ungrouped` : "",
+      nested > 0 ? `${nested} group(s) inside it will move up a level` : "",
+    ].filter(Boolean);
+
+    setPendingAction({
+      message:
+        consequences.length > 0
+          ? `Delete the group “${group.name}”? ${consequences.join(", and ")}.`
+          : `Delete the group “${group.name}”?`,
+      confirm: "Delete group",
+      action: async () => {
+        setGroups(await deleteGroup(group.id));
+        setItems((current) =>
+          current.map((item) =>
+            item.groupId === group.id ? { ...item, groupId: null } : item,
+          ),
+        );
+        if (currentGroupId() === group.id) {
+          setCurrentGroupId(null);
+        }
+        notify("Group removed");
+      },
+    });
+  };
+
+  /// Files a dragged group where it was dropped. The sidebar has already worked
+  /// out the parent and the place among its siblings — that is where the tree
+  /// lives — so this only has to write it down.
+  const handleMoveGroup = async (
+    groupId: string,
+    parentId: string | null,
+    beforeId: string | null,
+  ) => {
+    await run(async () => {
+      setGroups(await moveGroup(groupId, parentId, beforeId));
+    }, "Could not move the group");
   };
 
   const moveSelection = (delta: number) => {
@@ -784,6 +954,48 @@ function App() {
   const verticalStep = (delta: number) =>
     settings().displayMode === "list" ? delta : delta * gridColumns();
 
+  /// Whether the selected card has nothing beside it in that direction. Every
+  /// row of a list is the whole width, so there left and right leave for the
+  /// column straight away; a grid gives them a row to walk first.
+  const atGridEdge = (delta: number) => {
+    if (settings().displayMode === "list") {
+      return true;
+    }
+
+    const collection = displayOrder(visibleItems(), shouldSectionListItems());
+    const index = collection.findIndex((item) => item.id === selectedItemId());
+    if (index < 0) {
+      return true;
+    }
+
+    const columns = Math.max(1, gridColumns());
+    return delta > 0
+      ? (index + 1) % columns === 0 || index === collection.length - 1
+      : index % columns === 0;
+  };
+
+  /// Left and right move between the two columns. Inside the results they first
+  /// walk along the row of cards, and only leave for the sidebar once there is
+  /// nothing beside the selected one — the same way the eye reads the layout.
+  const stepSideways = (delta: number) => {
+    if (pane() === "groups") {
+      // The column is on the left, so the way out of it is to the right.
+      if (delta > 0) {
+        setPane("results");
+      }
+      return;
+    }
+
+    if (!atGridEdge(delta)) {
+      moveSelection(delta);
+      return;
+    }
+
+    if (delta < 0) {
+      setPane("groups");
+    }
+  };
+
   const hideLauncher = async () => {
     setEditorState(null);
     setSettingsOpen(false);
@@ -793,6 +1005,10 @@ function App() {
     // Only once it is off screen: going dormant while the window is still
     // painted would blink the panel out on the way.
     setSummonPhase("dormant");
+    // The next summon starts from an empty box. A query belongs to the moment it
+    // was typed in, and the launcher is almost never called back for the same
+    // one — leaving it behind means the first keystroke lands in a stale search.
+    setQuery("");
   };
 
   const handleAppKeyDown = async (event: KeyboardEvent) => {
@@ -805,9 +1021,10 @@ function App() {
 
     const target = event.target as HTMLElement | null;
 
-    // An inline editor owns its own Enter and Escape. Without this, pressing
-    // Escape to cancel a group name would hide the entire launcher instead.
-    if (target?.closest("[data-inline-editor]")) {
+    // An inline editor or a popup menu owns its own Enter, Escape and arrows.
+    // Without this, pressing Escape to cancel a group name would hide the entire
+    // launcher instead, and the arrows would move the selection behind it.
+    if (target?.closest("[data-inline-editor], [data-group-menu]")) {
       return;
     }
 
@@ -829,8 +1046,14 @@ function App() {
     }
 
     // Enter in the search box means "launch the highlighted result", or the
-    // first offered action when nothing matched.
+    // first offered action when nothing matched. In the column it means "open
+    // the view under the cursor", which is the results.
     if (target === searchInput && event.key === "Enter") {
+      if (pane() === "groups") {
+        event.preventDefault();
+        setPane("results");
+        return;
+      }
       if (hasConfirmation()) {
         event.preventDefault();
         await confirmSelection();
@@ -853,12 +1076,29 @@ function App() {
       return;
     }
 
-    // Left and right belong to the caret until it runs out of text — a caret in
-    // the middle of a query is where a typo gets fixed — and past that they walk
-    // the tab strip, which is the direction the tabs are laid out in. Up/down
-    // belong to the results, because a single-line field has no vertical caret
-    // to move — but a textarea moves between lines and a select or number input
-    // steps its value, so those keep theirs.
+    // Ctrl+comma for settings, tab-style, because it is the one thing the
+    // keyboard cannot reach any other way.
+    if (event.ctrlKey && (event.key === "," || event.code === "Comma")) {
+      event.preventDefault();
+      setSettingsOpen(true);
+      return;
+    }
+
+    // Ctrl+B for the column, tab-style, because it is the one control that has
+    // to survive its own subject disappearing.
+    if (event.ctrlKey && (event.key === "b" || event.key === "B")) {
+      event.preventDefault();
+      void toggleSidebar();
+      return;
+    }
+
+    // Left and right move between the two columns, and up and down walk
+    // whichever one they are in. The caret keeps left and right while there is
+    // text on the side it would move towards — a caret in the middle of a query
+    // is where a typo gets fixed — and past that they belong to the panes.
+    // Up/down belong to the panes either way: a single-line field has no
+    // vertical caret to move — but a textarea moves between lines and a select
+    // or number input steps its value, so those keep theirs.
     const ownsVerticalArrows = Boolean(
       target?.closest("textarea, select, input[type='number']"),
     );
@@ -869,7 +1109,7 @@ function App() {
         return;
       }
       event.preventDefault();
-      setCurrentGroupId(stepView(viewOrder(), currentGroupId(), forward));
+      stepSideways(forward);
       return;
     }
 
@@ -878,7 +1118,12 @@ function App() {
         return;
       }
       event.preventDefault();
-      moveSelection(verticalStep(event.key === "ArrowDown" ? 1 : -1));
+      const delta = event.key === "ArrowDown" ? 1 : -1;
+      if (pane() === "groups") {
+        setCurrentGroupId(stepView(viewSteps(), currentGroupId(), delta));
+      } else {
+        moveSelection(verticalStep(delta));
+      }
       return;
     }
 
@@ -927,6 +1172,9 @@ function App() {
         if (!payload && !dialogBusy()) {
           await currentWindow.hide();
           setSummonPhase("dormant");
+          // Also the path taken when the backend hides the window after a
+          // launch, so the query is cleared whichever way the window goes away.
+          setQuery("");
         }
       }),
     );
@@ -1025,22 +1273,81 @@ function App() {
       summonPhase={summonPhase()}
       uiScale={settings().uiScale}
     >
-      <div class="flex h-full flex-col gap-4">
-        {/* The wordmark and the field under it are one block, so the space
-            between them is theirs to set. Left to the column's uniform gap the
-            title floated with a hole under it — and on a band this wide, with
-            nothing anchoring the far end, the hole was most of the header.
-            The band doubles as the window's drag target: the strip in
-            LauncherShell covers this row plus the gap under it. */}
-        <div class="flex shrink-0 flex-col gap-2">
-          <div class="flex h-6 items-center select-none">
-            {/* The wordmark is the one place the accent is allowed to be purely
-                decorative: it is where the eye lands first, and a lit name
-                reads as "this thing is on". */}
-            <h1 class="bg-gradient-to-r from-fg to-signal bg-clip-text text-display font-semibold tracking-tight text-transparent drop-shadow-[0_0_18px_var(--color-signal-soft)]">
-              DeskRun
-            </h1>
-          </div>
+      {/* The sidebar and the content are two panels side by side. Hiding the
+          column gives its width back to the list, which is the whole reason to
+          hide it. */}
+      <div class="flex h-full gap-4">
+        <Show when={!settings().sidebarCollapsed}>
+          <GroupSidebar
+            groups={groups()}
+            currentGroupId={currentGroupId()}
+            counts={viewCounts()}
+            isExpanded={isGroupExpanded}
+            onSetExpanded={setGroupExpanded}
+            onSelect={(groupId) => {
+              setCurrentGroupId(groupId);
+              // Clicking the column is a statement about where the user is
+              // working, so the arrow keys follow them there.
+              setPane("groups");
+            }}
+            onMoveGroup={handleMoveGroup}
+            onRenameGroup={handleRenameGroup}
+            onDeleteGroup={handleDeleteGroup}
+            onCreateGroup={handleCreateGroup}
+          />
+        </Show>
+
+        <div class="flex min-w-0 flex-1 flex-col gap-4">
+          {/* The wordmark and the field under it are one block, so the space
+              between them is theirs to set. Left to the column's uniform gap the
+              title floated with a hole under it. */}
+          <div class="flex shrink-0 flex-col gap-2">
+            <div class="flex h-6 items-center justify-between select-none">
+              {/* The wordmark is the one place the accent is allowed to be purely
+                  decorative: it is where the eye lands first, and a lit name
+                  reads as "this thing is on". */}
+              <h1 class="bg-gradient-to-r from-fg to-signal bg-clip-text text-display font-semibold tracking-tight text-transparent drop-shadow-[0_0_18px_var(--color-signal-soft)]">
+                DeskRun
+              </h1>
+
+              {/* With the column hidden this button is what is left of it, so it
+                  lives in the title row rather than inside the sidebar: a
+                  control that disappears with the thing it controls cannot bring
+                  it back.
+                  It carries its name rather than a bare chevron: on its own,
+                  directly above Settings, the glyph read as an unexplained
+                  mark. */}
+              <button
+                type="button"
+                onClick={toggleSidebar}
+                aria-expanded={!settings().sidebarCollapsed}
+                title={settings().sidebarCollapsed ? "Show groups" : "Hide groups"}
+                // Above the shell's drag strip, which reaches across the top of
+                // the window and would otherwise turn every click on this button
+                // into a window drag.
+                class="relative z-chrome flex shrink-0 items-center gap-1.5 rounded-sharp px-2 py-0.5 text-meta text-fg-subtle transition-colors duration-100 hover:bg-fill hover:text-fg-muted"
+              >
+                <svg
+                  viewBox="0 0 16 16"
+                  class="h-3 w-3 shrink-0"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path
+                    d={
+                      settings().sidebarCollapsed
+                        ? "M6 3.5L10.5 8L6 12.5"
+                        : "M10 3.5L5.5 8l4.5 4.5"
+                    }
+                  />
+                </svg>
+                {settings().sidebarCollapsed ? "Show groups" : "Hide groups"}
+              </button>
+            </div>
 
           {/* Startup problems such as "the hotkey was taken" are not transient, so
               they live here rather than in the two-second toast. */}
@@ -1066,96 +1373,94 @@ function App() {
               left is a hairline: the labels are meant to hang off the search
               field's rule, and any more space reads as the strip drifting away
               from the field it belongs to. */}
-          <div class="flex shrink-0 flex-col gap-0.5">
             <SearchBar
               query={query()}
               hotkey={settings().hotkey}
               inputRef={(element) => {
                 searchInput = element;
               }}
-              onInput={(event) => setQuery(event.currentTarget.value)}
+              onInput={(event) => {
+                setQuery(event.currentTarget.value);
+                // Typing always means searching, whatever the arrow keys were
+                // pointed at a moment ago.
+                setPane("results");
+              }}
               onAddApp={handlePickApp}
               onAddFolder={handlePickFolder}
               onAddUrl={() => setEditorState({ mode: "create-url", item: null })}
               onAddCommand={() => setEditorState({ mode: "create-command", item: null })}
               onOpenSettings={() => setSettingsOpen(true)}
             />
-
-            <GroupTabs
-              groups={groups()}
-              currentGroupId={currentGroupId()}
-              discoveryCount={discoveryCandidates().filter((candidate) => !candidate.alreadyExists).length}
-              onSelect={setCurrentGroupId}
-              onReorderGroups={handleReorderGroups}
-              onCreateGroup={handleCreateGroup}
-            />
           </div>
-        </div>
-
-        <Show
-          when={currentGroupId() === DISCOVERY_VIEW_ID}
-          fallback={
-            <ItemGrid
-              items={visibleItems()}
-              viewMode={settings().displayMode}
-              activeItemId={selectedItemId()}
-              sectioned={shouldSectionListItems()}
-              query={query()}
-              viewId={currentGroupId()}
-              queryActions={queryActions()}
-              onRunQueryAction={runQueryAction}
-              onColumnsChange={setGridColumns}
-              sortable={
-                !query() &&
-                currentGroupId() !== FAVORITES_VIEW_ID &&
-                currentGroupId() !== RECENT_VIEW_ID
-              }
-              onSelect={(item) => setSelectedItemId(item.id)}
-              onPreviewHover={scheduleHoverPreview}
-              onPreviewLeave={clearHoverPreview}
-              onLaunch={handleLaunch}
-              onContextMenu={(item, x, y) => {
-                setSelectedItemId(item.id);
-                clearHoverPreview();
-                setContextMenu({ item, x, y });
-              }}
-              onReorder={handleReorder}
-            />
-          }
-        >
-          <DiscoveryPanel
-            busy={discoveryBusy()}
-            error={discoveryError()}
-            candidates={discoveryCandidates()}
-            selectedIds={selectedDiscoveryIds()}
-            searchQuery={discoveryQuery()}
-            hideExisting={hideExistingDiscovery()}
-            scanOptions={discoveryScanOptions()}
-            onSearchQueryChange={setDiscoveryQuery}
-            onSetHideExisting={setHideExistingDiscovery}
-            onSetScanOptions={setDiscoveryScanOptions}
-            onToggleAllVisible={(candidateIds, checked) => {
-              setSelectedDiscoveryIds((current) => {
-                if (checked) {
-                  return [...new Set([...current, ...candidateIds])];
+  
+          <Show
+            when={currentGroupId() === DISCOVERY_VIEW_ID}
+            fallback={
+              <ItemGrid
+                items={visibleItems()}
+                viewMode={settings().displayMode}
+                activeItemId={selectedItemId()}
+                sectioned={shouldSectionListItems()}
+                query={query()}
+                viewId={currentGroupId()}
+                queryActions={queryActions()}
+                onRunQueryAction={runQueryAction}
+                onColumnsChange={setGridColumns}
+                sortable={
+                  !query() &&
+                  currentGroupId() !== FAVORITES_VIEW_ID &&
+                  currentGroupId() !== RECENT_VIEW_ID
                 }
-                const hidden = new Set(candidateIds);
-                return current.filter((id) => !hidden.has(id));
-              });
-            }}
-            onToggleSelected={(candidateId, checked) => {
-              setSelectedDiscoveryIds((current) =>
-                checked
-                  ? current.includes(candidateId)
-                    ? current
-                    : [...current, candidateId]
-                  : current.filter((id) => id !== candidateId),
-              );
-            }}
-            onScan={runDiscoveryScan}
-            onImportSelected={importSelectedDiscoveryItems}
-          />
-        </Show>
+                onSelect={(item) => {
+                setSelectedItemId(item.id);
+                setPane("results");
+              }}
+                onPreviewHover={scheduleHoverPreview}
+                onPreviewLeave={clearHoverPreview}
+                onLaunch={handleLaunch}
+                onContextMenu={(item, x, y) => {
+                  setSelectedItemId(item.id);
+                  clearHoverPreview();
+                  setContextMenu({ item, x, y });
+                }}
+                onReorder={handleReorder}
+              />
+            }
+          >
+            <DiscoveryPanel
+              busy={discoveryBusy()}
+              error={discoveryError()}
+              candidates={discoveryCandidates()}
+              selectedIds={selectedDiscoveryIds()}
+              searchQuery={discoveryQuery()}
+              hideExisting={hideExistingDiscovery()}
+              scanOptions={discoveryScanOptions()}
+              onSearchQueryChange={setDiscoveryQuery}
+              onSetHideExisting={setHideExistingDiscovery}
+              onSetScanOptions={setDiscoveryScanOptions}
+              onToggleAllVisible={(candidateIds, checked) => {
+                setSelectedDiscoveryIds((current) => {
+                  if (checked) {
+                    return [...new Set([...current, ...candidateIds])];
+                  }
+                  const hidden = new Set(candidateIds);
+                  return current.filter((id) => !hidden.has(id));
+                });
+              }}
+              onToggleSelected={(candidateId, checked) => {
+                setSelectedDiscoveryIds((current) =>
+                  checked
+                    ? current.includes(candidateId)
+                      ? current
+                      : [...current, candidateId]
+                    : current.filter((id) => id !== candidateId),
+                );
+              }}
+              onScan={runDiscoveryScan}
+              onImportSelected={importSelectedDiscoveryItems}
+            />
+          </Show>
+        </div>
       </div>
 
       <Show when={hoverPreviewDisplay()}>
@@ -1278,7 +1583,6 @@ function App() {
         open={settingsOpen()}
         settings={settings()}
         configDirectory={configDirectory()}
-        groups={groups()}
         onClose={() => setSettingsOpen(false)}
         onSetHotkey={(value) =>
           run(async () => {
@@ -1370,40 +1674,6 @@ function App() {
             notify("Config imported");
           }, "Could not import the config")
         }
-        onCreateGroup={async (name) => {
-          const group = await createGroup(name);
-          setGroups((current) => [...current, group]);
-        }}
-        onRenameGroup={async (group, name) => {
-          const nextGroups = await renameGroup(group.id, name);
-          setGroups(nextGroups);
-        }}
-        onDeleteGroup={(group) => {
-          // Deleting a group also ungroups everything in it, which is a much
-          // bigger change than the button suggests, so say how many items are
-          // affected and let the user back out.
-          const affected = items().filter((item) => item.groupId === group.id).length;
-          setPendingAction({
-            message:
-              affected > 0
-                ? `Delete the group “${group.name}”? ${affected} item(s) will move to Ungrouped.`
-                : `Delete the group “${group.name}”?`,
-            confirm: "Delete group",
-            action: async () => {
-              const nextGroups = await deleteGroup(group.id);
-              setGroups(nextGroups);
-              setItems((current) =>
-                current.map((item) =>
-                  item.groupId === group.id ? { ...item, groupId: null } : item,
-                ),
-              );
-              if (currentGroupId() === group.id) {
-                setCurrentGroupId(null);
-              }
-              notify("Group removed");
-            },
-          });
-        }}
       />
 
       <Show when={pendingAction()}>

@@ -63,10 +63,14 @@ pub fn reorder_items(
 }
 
 #[tauri::command]
-pub fn create_group(state: State<'_, SharedState>, name: String) -> Result<Group, String> {
+pub fn create_group(
+    state: State<'_, SharedState>,
+    name: String,
+    parent_id: Option<String>,
+) -> Result<Group, String> {
     let mut storage = state.lock()?;
     storage
-        .create_group(name)
+        .create_group(name, parent_id)
         .map_err(|error| error.to_string())
 }
 
@@ -90,14 +94,18 @@ pub fn delete_group(state: State<'_, SharedState>, group_id: String) -> Result<V
         .map_err(|error| error.to_string())
 }
 
+/// Moves a group inside another one, or back to the top level, at a chosen place
+/// among its new siblings.
 #[tauri::command]
-pub fn reorder_groups(
+pub fn move_group(
     state: State<'_, SharedState>,
-    group_ids: Vec<String>,
+    group_id: String,
+    parent_id: Option<String>,
+    before_id: Option<String>,
 ) -> Result<Vec<Group>, String> {
     let mut storage = state.lock()?;
     storage
-        .reorder_groups(group_ids)
+        .move_group(&group_id, parent_id, before_id)
         .map_err(|error| error.to_string())
 }
 
@@ -176,6 +184,19 @@ pub fn launch_item_as_admin(
     item_id: String,
 ) -> Result<LaunchItem, String> {
     run_item(&app, &state, &item_id, true)
+}
+
+/// Whether an item's target is gone from disk. Asked after a launch has already
+/// failed, to tell "this was uninstalled" apart from the rest of what can go
+/// wrong — the frontend offers to delete the item only for that case.
+#[tauri::command]
+pub fn item_target_gone(state: State<'_, SharedState>, item_id: String) -> Result<bool, String> {
+    let storage = state.lock()?;
+    let item = storage
+        .get_item(&item_id)
+        .ok_or_else(|| "launch item not found".to_string())?;
+
+    Ok(launcher::target_is_gone(&item.kind, &item.target))
 }
 
 fn run_item(
@@ -306,6 +327,19 @@ pub fn set_ui_scale(
     let mut storage = state.lock()?;
     storage
         .set_ui_scale(normalized)
+        .map_err(|error| format!("{error:#}"))?;
+    bootstrap_data(&app, &storage)
+}
+
+#[tauri::command]
+pub fn set_sidebar_collapsed(
+    app: AppHandle,
+    state: State<'_, SharedState>,
+    collapsed: bool,
+) -> Result<BootstrapData, String> {
+    let mut storage = state.lock()?;
+    storage
+        .set_sidebar_collapsed(collapsed)
         .map_err(|error| format!("{error:#}"))?;
     bootstrap_data(&app, &storage)
 }
